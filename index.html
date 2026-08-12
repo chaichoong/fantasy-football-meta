@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FPL Season HQ · Kevin v Leo v James</title>
+<style>
+:root{--bg:#101418;--card:#1a2026;--card2:#20272e;--line:#2b333c;--txt:#e8ebee;--sub:#8b96a0;--kev:#4cc38a;--leo:#5aa9f0;--jam:#e0a84c;--a:#4cc38a;--b:#5aa9f0;--c:#6b7680;--warn:#e0a84c;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:15px;padding:12px;max-width:600px;margin:0 auto;}
+h1{font-size:17px;font-weight:600;margin-bottom:10px;}
+.tabs{display:flex;gap:5px;margin-bottom:12px;}
+.tabs button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;}
+.tabs button.on{background:var(--card2);color:var(--txt);border-color:#3d4854;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;}
+.card .lbl{font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;}
+.sec{font-size:12px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;margin:14px 0 4px;}
+.row{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
+.rk{font-size:11.5px;color:var(--sub);width:26px;text-align:right;flex-shrink:0;}
+.gr{font-size:11px;font-weight:700;border-radius:6px;padding:2px 0;width:20px;text-align:center;flex-shrink:0;}
+.gr.A{background:rgba(76,195,138,.15);color:var(--a);}
+.gr.B{background:rgba(90,169,240,.15);color:var(--b);}
+.gr.C{background:rgba(107,118,128,.2);color:var(--c);}
+.pn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pn small{color:var(--sub);font-size:11px;margin-left:4px;}
+.val{font-size:12.5px;color:var(--sub);flex-shrink:0;width:44px;text-align:right;}
+.own{font-size:10.5px;font-weight:700;border-radius:5px;padding:2px 6px;flex-shrink:0;width:34px;text-align:center;}
+.own.K{background:rgba(76,195,138,.15);color:var(--kev);}
+.own.L{background:rgba(90,169,240,.15);color:var(--leo);}
+.own.J{background:rgba(224,168,76,.15);color:var(--jam);}
+.own.F{background:transparent;color:#4a545e;border:1px solid var(--line);}
+.filters{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
+.filters button{background:var(--card);border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:600;}
+.filters button.on{background:var(--card2);color:var(--txt);border-color:#3d4854;}
+input[type=text]{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:14px;margin-bottom:8px;}
+.teams{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+.team{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;}
+.team .tn{font-size:13px;font-weight:600;}
+.team.kev{border-color:rgba(76,195,138,.5);}
+.team.kev .tn{color:var(--kev);}.team.leo .tn{color:var(--leo);}.team.jam .tn{color:var(--jam);}
+.team .score{font-size:18px;font-weight:600;}
+.team .meta{font-size:11px;color:var(--sub);line-height:1.5;}
+.note{font-size:12.5px;color:var(--sub);line-height:1.55;margin-bottom:10px;}
+.note b{color:var(--txt);}
+.fxbar{display:inline-block;width:44px;text-align:center;font-size:11px;font-weight:700;border-radius:5px;padding:2px 0;flex-shrink:0;}
+.fx5{background:rgba(76,195,138,.2);color:var(--a);}
+.fx4{background:rgba(76,195,138,.12);color:#7fd0a5;}
+.fx3{background:rgba(139,150,160,.15);color:var(--sub);}
+.fx2{background:rgba(224,168,76,.15);color:var(--warn);}
+.fx1{background:rgba(224,110,90,.18);color:#e08a76;}
+select{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:14px;margin-bottom:8px;width:100%;}
+.pill{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:11.5px;color:var(--sub);margin:2px 2px 2px 0;}
+</style>
+</head>
+<body>
+<h1>FPL Season HQ &middot; 2026/27</h1>
+<div class="tabs">
+  <button data-t="squads" class="on">Squads</button>
+  <button data-t="players">Players</button>
+  <button data-t="fixtures">Fixtures</button>
+  <button data-t="planner">GW Plan</button>
+</div>
+<div id="view"></div>
+
+<script>
+// Master data: [name, team, pos, seasonPtsIndex, PP/90]. Source: projection board updated 4 Aug 2026.
+const D=[
+["Bruno Fernandes","MUN","M",219.78,7.06],["Erling Haaland","MCI","F",214.89,7.16],["Morgan Gibbs-White","NFO","M",206.50,6.19],["Dominik Szoboszlai","LIV","M",188.84,5.67],["Matheus Cunha","MUN","M",187.42,6.49],["Bukayo Saka","ARS","M",185.17,6.94],["Gabriel","ARS","D",177.89,5.72],["Kiernan Dewsbury-Hall","EVE","M",173.60,5.58],["Ismaila Sarr","CRY","M",167.71,5.59],["Ollie Watkins","AVL","F",167.41,5.80],
+["Nico O'Reilly","MCI","D",166.85,5.78],["Antoine Semenyo","MCI","M",165.97,7.11],["Igor Thiago","BRE","F",165.28,5.31],["James Garner","EVE","M",163.63,4.91],["Bryan Mbeumo","MUN","M",163.63,6.14],["Florian Wirtz","LIV","M",163.17,5.87],["Neco Williams","NFO","D",162.67,4.58],["Matheus Nunes","MCI","D",160.92,5.17],["Enzo Le Fee","SUN","M",160.91,5.17],["Iliman Ndiaye","EVE","M",160.86,5.57],
+["Daniel Munoz","CRY","D",160.51,5.16],["Virgil van Dijk","LIV","D",160.17,4.81],["Declan Rice","ARS","M",159.96,5.54],["Ryan Gravenberch","LIV","M",159.16,4.77],["David Raya","ARS","G",158.36,4.17],["James Tarkowski","EVE","D",157.17,5.05],["Cole Palmer","CHE","M",155.29,6.35],["Diego Gomez","BHA","M",155.00,5.17],["Pedro Porro","TOT","D",152.79,4.91],["Adrien Truffert","BOU","D",152.58,4.29],
+["Morgan Rogers","CHE","M",151.65,5.69],["Gianluigi Donnarumma","MCI","G",150.43,3.96],["Rayan","BOU","M",149.97,5.62],["Emiliano Buendia","AVL","M",148.33,6.07],["Jeremy Doku","MCI","M",148.28,6.07],["John McGinn","AVL","M",147.78,4.75],["Alex Iwobi","FUL","M",146.86,4.90],["Marcus Tavernier","BOU","M",146.70,5.28],["Cody Gakpo","LIV","M",145.91,6.57],["Vitaliy Mykolenko","EVE","D",144.96,4.35],
+["Malick Thiaw","NEW","D",144.66,4.34],["Ethan Ampadu","LEE","M",144.35,4.06],["Alexis Mac Allister","LIV","M",144.08,5.19],["Matt Grimes","COV","M",143.30,4.30],["Benjamin Sesko","MUN","F",143.19,5.86],["Nikola Milenkovic","NFO","D",143.00,4.02],["Chris Richards","CRY","D",142.55,4.28],["Joao Pedro","CHE","F",142.35,5.12],["Granit Xhaka","SUN","M",142.19,4.27],["Alex Scott","BOU","M",142.05,4.57],
+["Dango Ouattara","BRE","M",141.40,5.30],["Jarrad Branthwaite","EVE","D",141.15,4.89],["Jordan Pickford","EVE","G",140.41,3.69],["Tyrick Mitchell","CRY","D",140.06,4.20],["Caoimhin Kelleher","BRE","G",139.86,3.68],["Youri Tielemans","MUN","M",139.27,5.22],["Michael Kayode","BRE","D",138.91,3.91],["Phil Foden","MCI","M",138.78,6.25],["Dominic Calvert-Lewin","LEE","F",138.71,4.46],["Jurrien Timber","ARS","D",138.52,5.67],
+["Nordi Mukiele","SUN","D",138.51,4.45],["Rayan Cherki","MCI","M",138.06,6.90],["Marc Guehi","MCI","D",137.65,5.16],["Alisson","LIV","G",137.64,3.62],["Elliot Anderson","MCI","M",137.28,4.94],["Robin Roefs","SUN","G",137.28,3.61],["Marcos Senesi","TOT","D",137.07,4.41],["Murillo","NFO","D",137.05,4.11],["Nathan Collins","BRE","D",136.93,4.11],["Jack Hinshelwood","BHA","M",136.92,5.13],
+["Milos Kerkez","LIV","D",136.92,4.40],["Anton Stach","LEE","M",136.41,4.91],["Jake O'Brien","EVE","D",136.41,4.09],["Enzo Fernandez","CHE","M",135.94,5.10],["James Hill","BOU","D",135.56,4.36],["Lukas Hornicek","NEW","G",135.28,3.56],["James Trafford","LEE","G",134.50,3.54],["Emiliano Martinez","AVL","G",134.36,3.54],["Lucas Perri","LEE","G",134.12,3.53],["Jan Paul van Hecke","TOT","D",134.10,4.31],
+["Martin Odegaard","ARS","M",133.98,6.03],["Amad Diallo","MUN","M",133.87,5.48],["Djordje Petrovic","BOU","G",133.85,3.52],["Matz Sels","NFO","G",133.63,3.52],["Moises Caicedo","CHE","M",133.38,4.45],["Yankuba Minteh","BHA","M",133.30,5.00],["Kevin Schade","BRE","M",133.20,5.45],["Alexander Isak","LIV","F",132.87,5.98],["Pascal Gross","BHA","M",132.46,4.77],["Adam Wharton","CRY","M",132.04,4.57],
+["Robert Sanchez","CHE","G",131.76,3.47],["Ferdi Kadioglu","BHA","D",131.30,4.22],["Riccardo Calafiori","ARS","D",130.43,5.59],["Gonzalo Garcia","FUL","F",130.42,5.59],["Dean Henderson","CRY","G",129.98,3.42],["Matty Cash","AVL","D",129.57,4.16],["Omar Alderete","SUN","D",128.81,4.14],["Ian Maatsen","AVL","D",128.76,4.64],["Lewis Miley","NEW","M",128.73,4.83],["Bart Verbruggen","BHA","G",128.53,3.38],
+["Igor Jesus","NFO","F",127.44,5.21],["Mikkel Damsgaard","BRE","M",127.07,5.20],["Antonin Kinsky","TOT","G",126.90,3.34],["Azor Matusiwa","IPS","M",126.57,4.07],["Carl Rushworth","COV","G",125.47,3.30],["Trai Hume","SUN","D",125.30,3.76],["Senne Lammens","MUN","G",124.69,3.28],["Regan Slater","HUL","M",124.25,3.99],["Jack Clarke","IPS","M",123.90,5.31],["Bernd Leno","FUL","G",123.49,3.25],
+["Jean-Philippe Mateta","CRY","F",122.90,5.53],["James Maddison","TOT","M",122.43,6.12],["Yasin Ayari","BHA","M",122.39,4.59],["Jaden Philogene","IPS","M",121.20,5.45],["Harry Wilson","LEE","M",121.07,4.95],["Yeremy Pino","CRY","M",120.32,4.92],["Oliver McBurnie","HUL","F",119.72,4.90],["Viktor Gyokeres","ARS","F",119.68,5.13],["Daniel Ballard","SUN","D",119.68,4.49],["Chris Wood","NFO","F",119.16,5.64],
+["Harvey Barnes","NEW","M",119.09,5.36],["Yehor Yarmolyuk","BRE","M",118.55,4.10],["Joe Rodon","LEE","D",118.49,3.55],["Tyler Adams","BOU","M",118.12,4.43],["Haji Wright","COV","F",118.10,4.43],["Antonee Robinson","FUL","D",118.00,4.43],["Junior Kroupi","BOU","M",117.67,5.88],["Boubacar Kamara","AVL","M",117.54,4.23],["Brian Brobbey","SUN","F",117.52,4.07],["Joao Gomes","AVL","M",117.51,4.23],
+["Liam Kitching","COV","D",117.22,3.77],["Kobbie Mainoo","MUN","M",116.95,4.58],["Josko Gvardiol","MCI","D",116.53,5.24],["Bobby Thomas","COV","D",115.98,4.01],["Evanilson","BOU","F",115.93,4.17],["Jack Rudoni","COV","M",115.77,5.21],["Diogo Dalot","MUN","D",115.29,3.99],["Sander Berge","FUL","M",115.27,3.71],["Mikel Merino","ARS","M",114.80,6.46],["Jaydee Canvot","CRY","D",114.75,4.30],
+["Habib Diarra","SUN","M",114.34,4.29],["Matt Crooks","HUL","M",114.07,4.28],["Bruno Guimaraes","ARS","M",113.55,5.11],["Charalampos Kostoulas","BHA","F",113.51,5.38],["Ola Aina","NFO","D",113.38,3.92],["Piero Hincapie","ARS","D",113.30,5.66],["Lisandro Martinez","MUN","D",112.95,3.63],["Mathias Jensen","BRE","M",112.19,4.59],["Milan van Ewijk","COV","D",111.92,3.60],["Tatsuhiro Sakamoto","COV","M",111.85,4.58],
+["Jacob Ramsey","NEW","M",111.08,4.54],["Sandro Tonali","TOT","M",111.01,4.16],["Mohamed Belloumi","HUL","M",110.33,5.52],["Noah Sadiki","SUN","M",110.18,3.54],["Kaoru Mitoma","BHA","M",110.14,4.96],["Ephron Mason-Clark","COV","M",109.50,4.93],["Noah Okafor","LEE","M",109.31,4.92],["Ezri Konsa","AVL","D",109.17,3.28],["Daichi Kamada","CRY","M",108.79,3.92],["Hayden Hackney","EVE","M",108.76,4.89],
+["Dominic Solanke","TOT","F",108.54,4.88],["Abdul Fatawu","IPS","M",107.81,4.62],["Lewis Hall","NEW","D",107.38,4.03],["Emile Smith Rowe","FUL","M",106.72,4.80],["Kjell Scherpen","IPS","G",106.65,2.81],["Curtis Jones","LIV","M",106.60,4.80],["Eberechi Eze","ARS","M",106.47,5.99],["Joachim Andersen","FUL","D",105.93,3.67],["Ryan Christie","BOU","M",105.43,4.74],["Calvin Bassey","FUL","D",105.31,3.38],
+["Liam Millar","HUL","M",105.19,4.73],["Will Osula","NEW","F",104.91,5.25],["Mateus Fernandes","TOT","M",104.90,4.72],["Ibrahim Sangare","NFO","M",104.61,4.71],["Kenny Tete","FUL","D",104.43,3.92],["Dara O'Shea","IPS","D",104.00,3.12],["Sven Botman","NEW","D",103.61,4.24],["Maxence Lacroix","CHE","D",103.30,4.23],["Omari Hutchinson","NFO","M",103.17,5.16],["Johan Manzambi","AVL","M",102.96,5.15],
+["Georginio Rutter","BHA","F",102.91,4.41],["Jayden Bogle","LEE","D",102.85,3.31],["James Justin","LEE","D",102.77,3.85],["Kristoffer Ajer","BRE","D",102.72,3.85],["Antonio Silva","BOU","D",102.43,3.84],["Pascal Struijk","BHA","D",102.19,3.83],["Kai Havertz","ARS","F",101.71,5.38],["Reece James","CHE","D",101.63,4.57],["Callum Hudson-Odoi","NFO","M",100.56,5.66],["Charlie Hughes","HUL","D",100.35,3.01],
+["Justin Kluivert","BOU","M",99.19,4.96],["Beto","EVE","F",98.69,5.22],["Oscar Mingueza","CRY","D",98.27,4.42],["Victor Munoz","LIV","M",98.06,5.52],["Mohammed Kudus","TOT","M",97.61,4.88],["Nick Woltemade","NEW","F",97.46,4.87],["Pedro Neto","CHE","M",97.02,4.85],["Leif Davis","IPS","D",96.92,2.91],["Jeremy Jacquet","LIV","D",96.07,4.32],["Jack Butland","HUL","G",96.02,2.53],
+["Jeremie Frimpong","LIV","D",95.47,4.30],["Valentino Livramento","NEW","D",95.43,3.58],["Maxim De Cuyper","BHA","D",95.09,4.75],["John Egan","HUL","D",95.05,3.06],["Richarlison","TOT","F",94.70,6.09],["Nilson Angulo","SUN","M",94.43,4.72],["Tim Iroegbunam","EVE","M",94.38,4.72],["Kevin","FUL","M",93.77,4.69],["Tarik Muharemovic","LEE","D",92.80,3.80],["Xaver Schlager","NFO","M",91.79,4.86],
+["Brenden Aaronson","LEE","M",91.37,4.57],["Estevao","CHE","M",90.22,5.07],["Luke Shaw","MUN","D",89.80,3.37],["Gabriel Gudmundsson","LEE","D",89.78,3.11],["Abdukodir Khusanov","MCI","D",89.56,4.48],["Rodri","MCI","M",89.45,5.03],["Ben White","ARS","D",89.22,5.74],["Lewis Cook","BOU","M",89.03,4.45],["Merlin Rohl","EVE","M",88.79,4.99],["Cristhian Mosquera","ARS","D",88.25,4.96],
+["Dejan Kulusevski","TOT","M",87.92,5.65],["Christos Tzolis","ARS","F",87.91,4.95],["Jaka Bijol","LEE","D",87.43,3.93],["Rodrigo Muniz","FUL","F",87.37,4.91],["Thierno Barry","EVE","F",87.28,4.62],["Ao Tanaka","LEE","M",87.02,4.35],["Sepp van den Berg","BRE","D",86.93,3.91],["William Saliba","ARS","D",86.82,4.88],["Sasa Lukic","IPS","M",85.54,4.05],["Martin Zubimendi","ARS","M",85.30,4.80],
+["Amine Adli","BOU","M",85.26,5.48],["Levi Colwill","CHE","D",84.90,3.82],["Conor Bradley","LIV","D",83.85,4.72],["Micky van de Ven","TOT","D",83.76,3.77],["Dan Ndoye","NFO","M",82.41,4.64],["Josh King","FUL","M",81.96,4.61],["Mats Wieffer","BHA","D",81.78,4.60],["Jacob Murphy","NEW","M",81.46,5.24],["Patrick Dorgu","MUN","M",81.34,5.23],["Daizen Maeda","IPS","M",81.20,4.30],
+["Jaidon Anthony","BRE","M",80.59,5.18],["Conor Gallagher","TOT","M",79.39,4.47],["Mamadou Sangare","BRE","M",79.23,5.09],["Ryan Sessegnon","FUL","D",78.69,5.06],["Dan Burn","NEW","D",78.36,3.92],["Lewis Dunk","BHA","D",78.23,3.52],["Frank Onyeka","COV","M",77.73,4.37],["Leny Yoro","MUN","D",77.19,3.47],["Keane Lewis-Potter","BRE","M",77.07,4.33],["Alejandro Garnacho","AVL","M",76.99,4.95],
+["Darnell Furlong","IPS","D",76.14,2.45],["Luka Vuskovic","BHA","D",74.63,4.20],["Ross Barkley","AVL","M",74.35,5.58],["Reinildo","SUN","D",73.85,3.02],["Jorrel Hato","CHE","D",73.60,3.49],["Loum Tchaouna","COV","M",73.45,4.13],["Carlos Baleba","BHA","M",72.12,4.06],["Pau Torres","AVL","D",72.03,3.24],["Hidemasa Morita","HUL","M",71.96,4.05],["Victor Torp","COV","M",71.54,5.37],
+["Ryan Giles","HUL","D",71.15,2.67],["Joelinton","NEW","M",71.12,4.57],["Wesley Fofana","CHE","D",70.98,3.55],["Djed Spence","TOT","D",70.61,3.53],["Emersonn","IPS","F",70.46,3.73],["Mathys Tel","TOT","M",70.38,5.28],["Myles Lewis-Skelly","ARS","M",70.34,3.96],["Omar Marmoush","MCI","F",70.21,6.32],["Ruben Dias","MCI","D",70.14,4.51],["Tijjani Reijnders","MCI","M",69.61,5.22],
+["Andrey Santos","MUN","M",68.70,4.42],["Oscar Bobb","FUL","M",68.45,4.40],["Stefanos Tzimas","BHA","F",68.25,6.14],["Marco Palestra","CHE","D",68.07,4.08],["Ellis Simms","COV","F",67.43,5.06],["Giovanni Leoni","LIV","D",67.25,4.32],["Jorgen Strand Larsen","CRY","F",67.10,4.31],["Jair Cunha","NFO","D",67.02,3.77],["Chemsdine Talbi","SUN","M",66.85,4.30],["Danny Welbeck","CHE","F",66.12,4.96],
+["Jacob Greaves","IPS","D",64.84,3.24],["Marcelino Nunez","IPS","M",64.31,4.45],["Tammy Abraham","AVL","F",63.39,5.71],["Evann Guessand","AVL","M",62.81,5.65],["George Hirst","IPS","F",62.61,4.02],["Harry Maguire","MUN","D",62.42,4.01],["Anthony Elanga","NEW","M",61.47,3.69],["Noni Madueke","ARS","M",60.93,5.48],["Chadi Riad","CRY","D",60.67,3.90],["Michael Keane","EVE","D",59.36,5.34],
+["Rodrigo Bentancur","TOT","M",59.74,4.48],["Chris Rigg","SUN","M",58.74,4.41],["Rio Ngumoha","LIV","M",57.59,6.48],["Rayan Ait-Nouri","MCI","D",57.30,5.16],["Destiny Udogie","TOT","D",56.23,3.61],["Nico Gonzalez","MCI","M",56.01,4.20],["Hugo Ekitike","LIV","F",55.94,6.29],["Yoane Wissa","NEW","F",54.69,3.79],["Lukas Nmecha","LEE","F",54.46,4.90],["Fabian Schar","NEW","D",53.94,4.05],
+["Bafode Diakite","BOU","D",50.06,3.75],["Dwight McNeil","EVE","M",47.30,5.32],["Max Dowman","ARS","M",45.51,6.83],["Emmanuel Emegha","CHE","F",45.35,5.10],["Tyrone Mings","AVL","D",45.26,3.39],["Brandon Thomas-Asante","COV","F",44.92,5.05],["Wilson Isidor","SUN","F",40.66,4.57],["Gabriel Martinelli","ARS","M",38.63,5.80],["Savinho","MCI","M",32.14,4.82],["Xavi Simons","TOT","M",32.71,4.91],
+["Andrew Robertson","TOT","D",26.51,3.98],["Taiwo Awoniyi","NFO","F",26.03,5.86],["Joshua Zirkzee","MUN","F",22.07,4.97],["Mason Mount","MUN","M",36.31,5.45],["Callum Wilson","BRE","F",33.70,5.05],["Eddie Nketiah","CRY","F",31.67,4.75],["Amadou Onana","AVL","M",31.13,4.67],["Brennan Johnson","CRY","M",35.75,4.02],["Jamie Gittens","CHE","M",21.17,4.76]
+];
+// GW1-5 short-term adjusted totals (top 100, model dated 5 Aug 2026)
+const GW={"Erling Haaland":37.7,"Bruno Fernandes":31.1,"Jeremy Doku":30.3,"Dominik Szoboszlai":29.9,"Bukayo Saka":29.3,"Ollie Watkins":29.0,"Igor Thiago":28.7,"Nico O'Reilly":28.6,"Antoine Semenyo":28.2,"Viktor Gyokeres":27.5,"Joao Pedro":27.4,"Jean-Philippe Mateta":27.2,"Bryan Mbeumo":27.1,"Alexander Isak":27.0,"Cole Palmer":26.8,"Florian Wirtz":26.6,"Dominic Calvert-Lewin":26.5,"Matheus Nunes":26.1,"Phil Foden":25.2,"Kiernan Dewsbury-Hall":25.0,"Jurrien Timber":24.5,"Matheus Cunha":24.5,"Riccardo Calafiori":24.5,"Igor Jesus":24.4,"Ismaila Sarr":24.4,"Marc Guehi":24.2,"Rayan":24.1,"Brian Brobbey":24.0,"Gabriel":23.9,"Martin Odegaard":23.9,"Harvey Barnes":23.6,"Dango Ouattara":23.3,"Cody Gakpo":23.3,"Georginio Rutter":23.3,"Marcus Tavernier":23.1,"Gianluigi Donnarumma":23.0,"Daniel Munoz":22.9,"Evanilson":22.9,"Emiliano Buendia":22.8,"Chris Wood":22.8,"Anton Stach":22.8,"Harry Wilson":22.7,"David Raya":22.7,"Yeremy Pino":22.6,"John McGinn":22.5,"Neco Williams":22.3,"Morgan Gibbs-White":22.2,"Kevin Schade":22.0,"Dominic Solanke":21.9,"Trai Hume":21.7,"Diego Gomez":21.7,"Will Osula":21.6,"Iliman Ndiaye":21.6,"Thierno Barry":21.5,"Cristhian Mosquera":21.4,"Morgan Rogers":21.4,"Jack Hinshelwood":21.4,"Milos Kerkez":21.2,"Amad Diallo":21.1,"Abdul Fatawu":21.0,"Justin Kluivert":21.0,"Enzo Le Fee":20.9,"Ian Maatsen":20.9,"Haji Wright":20.8,"Jordan Pickford":20.7,"Oliver McBurnie":20.6,"Abdukodir Khusanov":20.5,"Jack Rudoni":20.4,"Alisson":20.4,"Mats Wieffer":20.4,"Christos Tzolis":20.3,"Emiliano Martinez":20.2,"Senne Lammens":20.1,"Virgil van Dijk":20.0,"Declan Rice":19.7,"Alejandro Garnacho":19.7,"Caoimhin Kelleher":19.6,"Tyrick Mitchell":19.4,"Kaoru Mitoma":19.3,"Pedro Porro":19.3,"Alex Iwobi":19.3,"Lewis Hall":19.2,"Matz Sels":19.0,"Bart Verbruggen":18.9,"Vitaliy Mykolenko":18.8,"Jeremie Frimpong":18.8,"Luke Shaw":18.8,"Mikkel Damsgaard":18.8,"Harry Maguire":18.8,"Dean Henderson":18.7,"Jayden Bogle":18.7,"Enzo Fernandez":18.7,"Matty Cash":18.6,"Ferdi Kadioglu":18.5,"Elliot Anderson":18.5,"Lewis Miley":18.5,"James Trafford":18.5,"Pedro Neto":18.4,"Pascal Gross":18.4,"Ola Aina":18.1};
+// Ownership after the draft
+const OWNER={"Alexander Isak":"K","Cole Palmer":"K","Ollie Watkins":"K","Antoine Semenyo":"K","Morgan Gibbs-White":"K","Benjamin Sesko":"K","Florian Wirtz":"K","James Maddison":"K","Jurrien Timber":"K","Riccardo Calafiori":"K","Daniel Munoz":"K","Josko Gvardiol":"K","William Saliba":"K","Jordan Pickford":"K","Caoimhin Kelleher":"K",
+"Bruno Fernandes":"L","Nico O'Reilly":"L","Matheus Cunha":"L","Bryan Mbeumo":"L","Marc Guehi":"L","David Raya":"L","Joao Pedro":"L","Virgil van Dijk":"L","Alisson":"L","Declan Rice":"L","Dominik Szoboszlai":"L","Reece James":"L","Matheus Nunes":"L","Brian Brobbey":"L","Hugo Ekitike":"L",
+"Erling Haaland":"J","Bukayo Saka":"J","Gabriel":"J","Rayan Cherki":"J","Jeremy Doku":"J","Viktor Gyokeres":"J","Gianluigi Donnarumma":"J","James Trafford":"J","Sandro Tonali":"J","Harry Maguire":"J","Nick Woltemade":"J","Andrew Robertson":"J","Elliot Anderson":"J","Ben White":"J","Jeremy Jacquet":"J"};
+// Curated draft values and grades for the 45 drafted players (the canonical system score from draft night)
+const VAL={"Alexander Isak":93,"Cole Palmer":92,"Ollie Watkins":88,"Antoine Semenyo":86,"Morgan Gibbs-White":85,"Benjamin Sesko":83,"Florian Wirtz":72,"James Maddison":70,"Jurrien Timber":57,"Riccardo Calafiori":56,"Daniel Munoz":56,"Josko Gvardiol":54,"William Saliba":36,"Jordan Pickford":43,"Caoimhin Kelleher":30,"Bruno Fernandes":97,"Nico O'Reilly":78,"Matheus Cunha":74,"Bryan Mbeumo":73,"Marc Guehi":55,"David Raya":50,"Joao Pedro":39,"Virgil van Dijk":38,"Alisson":29,"Declan Rice":58,"Dominik Szoboszlai":57,"Reece James":55,"Matheus Nunes":54,"Brian Brobbey":45,"Hugo Ekitike":5,"Erling Haaland":100,"Bukayo Saka":90,"Gabriel":80,"Rayan Cherki":68,"Jeremy Doku":62,"Viktor Gyokeres":61,"Gianluigi Donnarumma":44,"James Trafford":43,"Sandro Tonali":50,"Harry Maguire":45,"Nick Woltemade":45,"Andrew Robertson":42,"Elliot Anderson":40,"Ben White":40,"Jeremy Jacquet":20};
+const GRC={"Alexander Isak":"A","Cole Palmer":"A","Ollie Watkins":"A","Antoine Semenyo":"A","Morgan Gibbs-White":"A","Benjamin Sesko":"A","Florian Wirtz":"B","James Maddison":"B","Jurrien Timber":"B","Riccardo Calafiori":"B","Daniel Munoz":"B","Josko Gvardiol":"B","William Saliba":"C","Jordan Pickford":"B","Caoimhin Kelleher":"C","Bruno Fernandes":"A","Nico O'Reilly":"A","Matheus Cunha":"B","Bryan Mbeumo":"B","Marc Guehi":"B","David Raya":"B","Joao Pedro":"C","Virgil van Dijk":"C","Alisson":"C","Declan Rice":"B","Dominik Szoboszlai":"B","Reece James":"B","Matheus Nunes":"B","Brian Brobbey":"B","Hugo Ekitike":"C","Erling Haaland":"A","Bukayo Saka":"A","Gabriel":"A","Rayan Cherki":"B","Jeremy Doku":"B","Viktor Gyokeres":"B","Gianluigi Donnarumma":"B","James Trafford":"B","Sandro Tonali":"B","Harry Maguire":"B","Nick Woltemade":"B","Andrew Robertson":"C","Elliot Anderson":"C","Ben White":"C","Jeremy Jacquet":"C"};
+// Per-GW team fixture modifiers, GW1-5, from the fixture model notes (approximate where the model gave only a run-level read)
+const MOD={MCI:[1.3,1.0,1.3,0.9,1.3],ARS:[1.25,1.1,1.1,1.1,1.1],LIV:[0.9,1.1,1.1,1.1,1.1],MUN:[1.3,1.3,1.0,0.6,1.0],CHE:[1.0,1.0,1.0,1.35,1.0],NFO:[1.1,1.1,1.1,1.0,1.35],SUN:[1.1,1.1,1.0,0.6,0.6],BOU:[0.6,0.9,1.0,1.0,1.0],HUL:[0.6,0.8,0.8,0.8,0.8],COV:[0.9,0.9,0.55,0.9,0.6],IPS:[0.85,0.6,0.85,0.85,0.85]};
+// Injury status: 0 fit, 1 doubt, 2 out. Preset from verified news; everything else assumed fit until you update it.
+let INJ={"Hugo Ekitike":2};
+let MOM={}; // momentum: -2 cold .. +2 hot, applied as 0.8x to 1.2x
+let FXW={}; // current-gameweek fixture ratings per team (1-5), from refresh; overrides MOD beyond GW5
+let META={gw:1,date:"pre-season",updated:"draft data, 8 Aug 2026"};
+try{INJ=Object.assign(INJ,JSON.parse(localStorage.getItem("fplHQinj")||"{}"))}catch(e){}
+try{MOM=JSON.parse(localStorage.getItem("fplHQmom")||"{}")}catch(e){}
+try{FXW=JSON.parse(localStorage.getItem("fplHQfxw")||"{}")}catch(e){}
+try{const m=JSON.parse(localStorage.getItem("fplHQmeta")||"null");if(m)META=m;}catch(e){}
+function saveInj(){try{localStorage.setItem("fplHQinj",JSON.stringify(INJ));localStorage.setItem("fplHQmom",JSON.stringify(MOM));localStorage.setItem("fplHQfxw",JSON.stringify(FXW));localStorage.setItem("fplHQmeta",JSON.stringify(META))}catch(e){}}
+function applyPack(txt){
+  try{
+    const j=JSON.parse(txt.replace(/```json|```/g,"").trim());
+    if(j.gameweek){META.gw=j.gameweek;gwSel=j.gameweek;}
+    if(j.date)META.date=j.date;
+    META.updated=new Date().toLocaleDateString("en-GB");
+    (j.players||[]).forEach(p=>{
+      const s=p.status==="out"?2:p.status==="doubt"?1:0;
+      if(s)INJ[p.name]=s;else delete INJ[p.name];
+      if(typeof p.momentum==="number")MOM[p.name]=Math.max(-2,Math.min(2,p.momentum));
+    });
+    (j.teams||[]).forEach(t=>{FXW[t.code]=Math.max(1,Math.min(5,t.fx))});
+    saveInj();render();
+    return true;
+  }catch(e){alert("Pack not valid JSON. Copy the whole code block from chat and paste again.");return false;}
+}
+async function refreshLive(){
+  const btn=document.getElementById("refBtn");
+  if(btn){btn.textContent="Refreshing (30-60s)...";btn.disabled=true;}
+  const owned=P.filter(x=>x.o!=="F").map(x=>x.n+" ("+x.t+")").join(", ");
+  try{
+    const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,
+        tools:[{type:"web_search_20250305",name:"web_search"}],
+        messages:[{role:"user",content:"Today's date and the current or next Premier League gameweek number for the 2026/27 season, plus injury/availability status and recent form for these FPL players: "+owned+". Also rate each Premier League club's fixture difficulty for that gameweek, 5 = easiest. Respond ONLY with JSON, no backticks, no preamble: {\"gameweek\":n,\"date\":\"...\",\"players\":[{\"name\":\"exact name as given\",\"status\":\"fit|doubt|out\",\"momentum\":-2 to 2}],\"teams\":[{\"code\":\"MCI|ARS|LIV|MUN|CHE|NFO|SUN|BOU|HUL|COV|IPS|EVE|CRY|AVL|BRE|BHA|TOT|FUL|LEE|NEW\",\"fx\":1-5}]}. Only include players whose status is not fit or whose momentum is notable."}]})});
+    const data=await resp.json();
+    const txt=(data.content||[]).filter(i=>i.type==="text").map(i=>i.text).join("");
+    if(!applyPack(txt))throw new Error("parse");
+  }catch(e){
+    alert("Live refresh needs this file open inside the Claude app viewer. In Chrome: message Claude 'GW data pack please', copy the code block from the reply, and paste it in the box below.");
+  }
+  if(btn){btn.textContent="Refresh live data";btn.disabled=false;}
+  render();
+}
+// Team early-run fixture ratings GW1-5 (rank + read, model dated 5 Aug 2026)
+const FIX=[["MCI",5,"Elite. Two 80%+ home games, nothing scary"],["ARS",5,"Elite. 80%+ opener, strong throughout"],["LIV",4,"Strong and steady, no trap week"],["MUN",4,"Fast start, then City in GW4"],["NFO",4,"Value team with the schedule, three strong home games"],["CHE",3,"Lumpy, one huge week in GW4"],["NEW",3,"Backloaded"],["EVE",3,"Backloaded"],["BRE",3,"Decent, home-heavy"],["AVL",3,"Middling"],["BHA",3,"Middling, tough finish"],["TOT",3,"Middling"],["CRY",3,"Slow start"],["FUL",3,"Middling"],["BOU",2,"Brutal opener, then fine"],["LEE",2,"Below average"],["SUN",2,"Opens fine, Arsenal then City GW4-5"],["COV",2,"Two wipeouts: away Arsenal and City"],["IPS",1,"Rough throughout"],["HUL",1,"Worst in the league. Home games are MUN and AVL"]];
+const GWNOTES=[
+["GW1 (23 Aug)","City home to Bournemouth: Haaland's first big window. Liverpool away at Newcastle. Utd open with Hull."],
+["GW2","Utd v Ipswich: Bruno and Mbeumo's best early week. Bournemouth's brutal opener continues."],
+["GW3","City home to Coventry: near-zero-chance away trip for Coventry. Haaland captain window two."],
+["GW4","Manchester derby: bench or expect little from Utd assets. Chelsea's best matchup of the run: Palmer's week. Sunderland's collapse begins at Arsenal."],
+["GW5","City home to Sunderland: Haaland window three. Forest home to Coventry: Gibbs-White's best week. Hull still winless on fixtures."]];
+const NAMES={K:"Kevin",L:"Leo",J:"James",F:"Free"};
+const ORDER={F:1,M:2,D:3,G:4};
+const POSNAME={F:"FW",M:"MID",D:"DEF",G:"GK"};
+// System grade from season points index, per position bands (free agents only; drafted players keep curated grades)
+function grade(p,pts){
+  if(p==="M")return pts>=180?"A":pts>=120?"B":"C";
+  if(p==="F")return pts>=140?"A":pts>=100?"B":"C";
+  if(p==="D")return pts>=160?"A":pts>=115?"B":"C";
+  return pts>=155?"A":pts>=125?"B":"C";
+}
+const P=D.map((a,i)=>({n:a[0],t:a[1],p:a[2],pts:a[3],pp:a[4],g:GRC[a[0]]||grade(a[2],a[3]),v:VAL[a[0]]!==undefined?VAL[a[0]]:Math.round(a[3]/2.2),o:OWNER[a[0]]||"F",gw:GW[a[0]]||null}));
+P.sort((a,b)=>b.v-a.v||b.pts-a.pts);P.forEach((x,i)=>x.r=i+1);
+function fxOf(t){const f=FIX.find(x=>x[0]===t);return f?f[1]:3}
+function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
+let tab="squads",posF="ALL",ownF="ALL",q="";
+function esc(s){return s.replace(/'/g,"\\'")}
+function render(){
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
+  const v=document.getElementById("view");
+  if(tab==="squads")return v.innerHTML=squadsView();
+  if(tab==="players")return v.innerHTML=playersView();
+  if(tab==="fixtures")return v.innerHTML=fixturesView();
+  if(tab==="planner")return v.innerHTML=plannerView();
+}
+function squadTotal(o){return P.filter(x=>x.o===o).reduce((s,x)=>s+x.v,0)}
+function squadsView(){
+  const T=["K","J","L"].map(o=>({o,tot:squadTotal(o),n:P.filter(x=>x.o===o).length,A:P.filter(x=>x.o===o&&x.g==="A").length}));
+  let h='<div class="teams">'+T.map(t=>'<div class="team '+(t.o==="K"?"kev":t.o==="L"?"leo":"jam")+'"><div class="tn">'+NAMES[t.o]+'</div><div class="score">'+t.tot+'</div><div class="meta">'+t.n+'/15 &middot; '+t.A+' A-grade</div></div>').join("")+'</div>';
+  h+='<div class="note"><b>Kevin 1001, James 830, Leo 807.</b> One metric everywhere in this app now: the draft value score (70% projected points, 20% minutes certainty, 10% ceiling and edge). This matches draft night exactly. The raw points index still appears per player as reference only; it is one input to the score, not the score, and squad totals are never computed from it.</div>';
+  ["K","J","L"].forEach(o=>{
+    h+='<div class="sec">'+NAMES[o]+'</div>';
+    P.filter(x=>x.o===o).sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.v-a.v).forEach(x=>{h+=rowHtml(x,false)});
+  });
+  return h;
+}
+function rowHtml(x,showOwner){
+  return '<div class="row"><span class="rk">'+x.r+'</span><span class="gr '+x.g+'">'+x.g+'</span><span class="pn">'+x.n+'<small>'+x.t+' '+POSNAME[x.p]+'</small></span><span class="val">'+x.v+' &middot; '+x.pp.toFixed(1)+'</span>'+(showOwner?'<span class="own '+x.o+'">'+(x.o==="F"?"Free":NAMES[x.o])+'</span>':'')+'</div>';
+}
+function playersView(){
+  let h='<input type="text" id="srch" placeholder="Search player or team" value="'+q+'" oninput="q=this.value;render();document.getElementById(\'srch\').focus();const el=document.getElementById(\'srch\');el.setSelectionRange(el.value.length,el.value.length);">';
+  h+='<div class="filters">'+["ALL","F","M","D","G"].map(p=>'<button onclick="posF=\''+p+'\';render()" class="'+(posF===p?"on":"")+'">'+(p==="ALL"?"All":POSNAME[p])+'</button>').join("")+'<button onclick="ownF=ownF===\'F\'?\'ALL\':\'F\';render()" class="'+(ownF==="F"?"on":"")+'">Free only</button></div>';
+  h+='<div class="note">Score column: season points index &middot; points per 90. Grades are system bands per position. '+P.length+' players covered; anything below this list is sub-viable filler in a 3-manager league.</div>';
+  let rows=P.filter(x=>(posF==="ALL"||x.p===posF)&&(ownF==="ALL"||x.o==="F")&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
+  if(posF==="ALL"){rows.slice(0,260).forEach(x=>h+=rowHtml(x,true));}
+  else{rows.forEach(x=>h+=rowHtml(x,true));}
+  return h;
+}
+function fixturesView(){
+  let h='<div class="card"><div class="lbl">Team fixture runs &middot; Gameweeks 1-5</div>';
+  FIX.forEach((f,i)=>{h+='<div class="row"><span class="rk">'+(i+1)+'</span><span class="fxbar fx'+f[1]+'">'+f[0]+'</span><span class="pn" style="white-space:normal;font-size:12.5px;color:var(--sub)">'+f[2]+'</span></div>'});
+  h+='</div>';
+  h+='<div class="card"><div class="lbl">Gameweek notes</div>';
+  GWNOTES.forEach(g=>{h+='<div style="margin-bottom:8px;"><div style="font-size:13px;font-weight:600;">'+g[0]+'</div><div style="font-size:12.5px;color:var(--sub);line-height:1.5;">'+g[1]+'</div></div>'});
+  h+='</div>';
+  h+='<div class="note">Season opener 23 August, GW1 deadline Friday 21 August. Window closes 1 September, so re-check any player in transfer talk before each of the first three deadlines. Ratings and notes from the fixture model dated 5 August; per-gameweek difficulty beyond GW5 gets added once the model publishes it.</div>';
+  return h;
+}
+let planTeam="K",gwSel=META.gw||1;
+const INJLBL=["Fit","Doubt","Out"];
+function cycleInj(n){const cur=INJ[n]||0;const nx=(cur+1)%3;if(nx===0)delete INJ[n];else INJ[n]=nx;saveInj();render();}
+// THE single weekly number. One formula, four inputs:
+// WeekScore = draft value (quality) x fixture (this GW) x availability x momentum
+function gwScore(x){
+  const fx=gwSel<=5?(MOD[x.t]||[1,1,1,1,1])[gwSel-1]:(FXW[x.t]?0.4+FXW[x.t]*0.2:1);
+  const inj=INJ[x.n]||0;
+  if(inj===2)return 0;
+  const mom=1+(MOM[x.n]||0)*0.1;
+  return (x.v/10)*fx*(inj===1?0.6:1)*mom;
+}
+function plannerView(){
+  let h='<div class="card"><div class="lbl">Data status</div><div style="font-size:13px;">Gameweek '+META.gw+' &middot; '+META.date+'</div><div style="font-size:11.5px;color:var(--sub);margin:2px 0 8px;">Last updated: '+META.updated+'</div>';
+  h+='<button id="refBtn" onclick="refreshLive()" style="width:100%;background:var(--card2);border:1px solid #3d4854;color:var(--txt);border-radius:8px;padding:9px 0;font-size:13px;font-weight:600;margin-bottom:6px;">Refresh live data</button>';
+  h+='<textarea id="packBox" placeholder="Or paste a data pack from Claude chat here" style="width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:12px;height:52px;margin-bottom:6px;"></textarea>';
+  h+='<button onclick="applyPack(document.getElementById(\'packBox\').value)" style="width:100%;background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;">Apply pack</button></div>';
+  h+='<select onchange="planTeam=this.value;render()">'+["K","L","J"].map(o=>'<option value="'+o+'"'+(planTeam===o?" selected":"")+'>'+NAMES[o]+"'s plan</option>").join("")+'</select>';
+  const gws=[];for(let g=Math.max(1,META.gw-1);g<=Math.min(38,META.gw+3);g++)gws.push(g);
+  h+='<div class="filters">'+gws.map(g=>'<button onclick="gwSel='+g+';render()" class="'+(gwSel===g?"on":"")+'">GW'+g+'</button>').join("")+'</div>';
+  const mine=P.filter(x=>x.o===planTeam).map(x=>({...x,e:gwScore(x)}));
+  const gk=mine.filter(x=>x.p==="G").sort((a,b)=>b.e-a.e);
+  const out=mine.filter(x=>x.p!=="G").sort((a,b)=>b.e-a.e);
+  let xi=[gk[0]],d=0,m=0,f=0;
+  out.forEach(x=>{if(xi.length>=11)return;
+    const left=11-xi.length;const needD=Math.max(0,3-d),needM=Math.max(0,3-m),needF=Math.max(0,1-f);
+    const reserved=needD+needM+needF;
+    const isNeeded=(x.p==="D"&&needD>0)||(x.p==="M"&&needM>0)||(x.p==="F"&&needF>0);
+    if(isNeeded||left>reserved){xi.push(x);if(x.p==="D")d++;if(x.p==="M")m++;if(x.p==="F")f++;}
+  });
+  const bench=mine.filter(x=>!xi.includes(x));
+  function prow(x,strong){
+    const inj=INJ[x.n]||0;const mo=MOM[x.n]||0;
+    const moChip=mo?'<span style="font-size:10px;font-weight:700;color:'+(mo>0?'var(--a)':'#e08a76')+';flex-shrink:0;">'+(mo>0?'&#9650;':'&#9660;')+Math.abs(mo)+'</span>':'';
+    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+'</small></span>'+moChip+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'#e08a76':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>';
+  }
+  h+='<div class="card"><div class="lbl">Recommended XI &middot; Gameweek '+gwSel+'</div>';
+  xi.sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.e-a.e).forEach(x=>{h+=prow(x)});
+  h+='</div><div class="card"><div class="lbl">Bench</div>';
+  bench.sort((a,b)=>b.e-a.e).forEach(x=>{h+=prow(x)});
+  h+='</div>';
+  const free=P.filter(x=>x.o==="F").map(x=>({...x,e:gwScore(x)})).sort((a,b)=>b.e-a.e);
+  h+='<div class="card"><div class="lbl">Waiver targets this gameweek</div>';
+  let shown=0;
+  free.forEach(x=>{if(shown>=10)return;
+    const weak=mine.filter(y=>y.p===x.p).sort((a,b)=>a.e-b.e)[0];
+    if(weak&&x.e>weak.e){shown++;
+      h+='<div class="row"><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+'</small></span><span class="val">'+x.e.toFixed(1)+'</span><span style="font-size:11px;color:var(--sub);flex-shrink:0;">for '+weak.n.split(" ").slice(-1)[0]+' ('+weak.e.toFixed(1)+')</span></div>';}
+  });
+  if(!shown)h+='<div class="note" style="margin:0">No free agent beats this squad this week. Hold.</div>';
+  h+='</div>';
+  h+='<div class="note"><b>One score, four inputs.</b> Week score = draft value (player quality, fixed at draft night) &times; this week\'s fixture &times; availability &times; momentum. Refresh updates the last three; quality only changes when we re-run the board together. Tap any status button to override manually. Weekly ritual: Friday before deadline, refresh (in the Claude viewer) or paste a data pack from chat (in Chrome), then read the XI and waiver list. Momentum arrows show hot and cold streaks from the latest refresh. Ekitike preset Out until spring. Never drop an A-grade on one bad week; momentum is a tiebreaker, not a strategy.</div>';
+  return h;
+}
+document.querySelector(".tabs").addEventListener("click",e=>{if(e.target.dataset.t){tab=e.target.dataset.t;render()}});
+render();
+</script>
+</body>
+</html>
