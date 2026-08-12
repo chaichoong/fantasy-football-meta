@@ -147,8 +147,19 @@ result; nothing in the accuracy record depends on Meta, so no history was invali
   **Preseason constraint:** the official game 404s all picks until the first deadline, so
   the tab confirms the team and waits. Verified against a simulated squad, since no real
   picks exist yet — re-verify against a real team after the GW1 deadline.
-- **Price Changes** section — the data (`cost_change_event`) is present but zero all
-  preseason, so it renders as the adaptive hero card until prices actually move.
+- ~~**Price Changes**~~ ✅ DONE 12 Aug 2026. Four parts: moved-this-GW (from
+  `cost_change_event`), our own recorded change log, under-pressure estimate, and the
+  user's own squad value change (`cost_change_start`).
+  **The important bit: the official API keeps NO price history — only the current net
+  change.** So `takePriceSnapshot()` in the relay records one daily snapshot to KV and
+  appends real deltas to a rolling `price:changes` log (capped 400), exposed at
+  `/pricechanges`. Recording began 2026-08-12; that log is the only place this history
+  exists, and it is a genuine product differentiator. One KV write per day, guarded
+  against duplicates.
+  "Under pressure" is an ESTIMATE and is labelled as one everywhere — the real algorithm
+  is undisclosed, so it ranks net transfers weighted by ownership. Never present it as a
+  guaranteed overnight change. All four parts verified against simulated live data since
+  every price field is zero preseason.
 - **Login / accounts** — nothing built, nothing collected. Do not build a fake sign-in.
 
 ## Parked (good ideas, wrong time)

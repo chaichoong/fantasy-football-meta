@@ -14,7 +14,7 @@ function saveInj(){try{localStorage.setItem("fplHQinj",JSON.stringify(INJ));loca
 // Official FPL feed via our relay (the API blocks browsers directly; the relay adds CORS + 15-min cache).
 const RELAY="https://fpl-relay.kevinbrittain.workers.dev";
 
-let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},XG={},PRICEMOVE={},NEWS=[],ELS={},TEAMSHORT={},LIVEFX=null,LIVEOK=false,DEADLINE="";
+let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},XG={},PRICEMOVE={},PRICESEASON={},TRMOM={},NEWS=[],ELS={},TEAMSHORT={},LIVEFX=null,LIVEOK=false,DEADLINE="";
 function fdrMult(d){return {1:1.35,2:1.25,3:1.0,4:0.8,5:0.6}[d]||1;}
 async function loadLive(){
   lastLoad=Date.now();
@@ -26,7 +26,7 @@ async function loadLive(){
     const byId={};bs.elements.forEach(e=>byId[e.id]=e);
     const short={};bs.teams.forEach(t=>short[t.id]=t.short_name);
     ELS=byId;TEAMSHORT=short;
-    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};OWN={};XG={};PRICEMOVE={};
+    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};OWN={};XG={};PRICEMOVE={};PRICESEASON={};TRMOM={};
     P.forEach(x=>{
       const e=byId[FPLID[x.n]];if(!e)return;
       PRICE[x.n]=e.now_cost/10;
@@ -36,6 +36,8 @@ async function loadLive(){
       OWN[x.n]=parseFloat(e.selected_by_percent)||0;
       XG[x.n]={xg:parseFloat(e.expected_goals_per_90)||0,xa:parseFloat(e.expected_assists_per_90)||0,xgc:parseFloat(e.expected_goals_conceded_per_90)||0,mins:e.minutes||0,ppg:parseFloat(e.points_per_game)||0};
       PRICEMOVE[x.n]=(e.cost_change_event||0)/10;
+      PRICESEASON[x.n]=(e.cost_change_start||0)/10;
+      TRMOM[x.n]={in:e.transfers_in_event||0,out:e.transfers_out_event||0};
     });
     NEWS=bs.elements.filter(e=>(e.news||"").trim()).map(e=>({
         n:e.web_name,t:short[e.team],news:e.news,added:e.news_added||"",
@@ -277,7 +279,7 @@ function fxOf(t){
 function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
 let tab="dash",posF="ALL",ownF="ALL",q="",sortMode="val";
 function esc(s){return s.replace(/'/g,"\\'")}
-const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",transfers:"Transfer Planner",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
+const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",transfers:"Transfer Planner",prices:"Price Changes",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
 function render(){
   updateStrip();
   const pt=document.getElementById("pageTitle");
@@ -294,6 +296,7 @@ function render(){
   if(tab==="dash")return v.innerHTML=dashView();
   if(tab==="news")return v.innerHTML=newsView();
   if(tab==="transfers")return v.innerHTML=transfersView();
+  if(tab==="prices")return v.innerHTML=pricesView();
   if(tab==="myteam"){if(MT.id&&MT.state==="idle"){MT.state="loading";setTimeout(loadMyTeam,0);}return v.innerHTML=myTeamView();}
   if(tab==="picks")return v.innerHTML=bestPicksView();
   if(tab==="compare")return v.innerHTML=compareView();
@@ -796,6 +799,82 @@ function myTeamView(){
 function mtRow(r,badge){
   const c=confidenceOf(r.x);
   return '<div class="row" style="cursor:pointer;" onclick="openPlayer(\''+esc(r.x.n)+'\')"><span class="tc" style="background:'+(TEAMCOL[r.x.t]||"#888")+'1f;color:'+(TEAMCOL[r.x.t]||"#888")+';">'+r.x.t+'</span><span class="pn">'+r.x.n+(badge?' <span class="conf" style="background:var(--accent)1f;color:var(--accent);">'+badge+'</span>':'')+'<small>'+POSNAME[r.x.p]+' &middot; &pound;'+(PRICE[r.x.n]||0).toFixed(1)+'m'+(r.x.ext?' &middot; not in our rated list':'')+'</small></span><span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span><span class="val">'+r.e.toFixed(1)+'</span></div>';
+}
+// ---- Price changes ----
+// The official API exposes only the CURRENT net change and no history at all, so our
+// relay records a daily snapshot and keeps its own change log. Movement pressure is an
+// ESTIMATE: the real algorithm is not published, so this is net transfers scaled by how
+// many managers own the player, never dressed up as a guarantee.
+let PC={log:null,since:null,state:"idle"};
+async function loadPriceChanges(){
+  PC.state="loading";render();
+  try{
+    const d=await fetch(RELAY+"/pricechanges",{signal:AbortSignal.timeout(12000)}).then(r=>r.json());
+    PC.log=d.changes||[];PC.since=d.recordingSince;PC.state="ready";
+  }catch(e){PC.state="error";}
+  render();
+}
+function momentumOf(x){
+  const m=TRMOM[x.n];if(!m)return null;
+  const net=m.in-m.out;
+  if(net===0&&m.in===0&&m.out===0)return null;
+  const owners=Math.max(1,(OWN[x.n]||0.1)/100*11000000/1000); // owners in thousands, rough scale
+  return {net,pressure:net/owners};
+}
+function pricesView(){
+  if(!LIVEOK)return '<div class="card"><div class="lbl">Connecting</div><div style="font-size:13px;">Waiting for the official feed&hellip;</div></div>';
+  if(PC.state==="idle")setTimeout(loadPriceChanges,0);
+  let h='<div class="note"><b>Prices move overnight, and they cost or make you money.</b> A player you own who drops takes value off your squad; one who is about to rise is cheaper today than tomorrow. This section tracks what has already moved and what is under pressure.</div>';
+  // 1. Movement this gameweek, from the official field
+  const movers=poolPlayers().filter(x=>PRICEMOVE[x.n]).sort((a,b)=>Math.abs(PRICEMOVE[b.n])-Math.abs(PRICEMOVE[a.n]));
+  h+='<div class="card"><div class="lbl">Moved this gameweek</div>';
+  if(!movers.length)h+='<div style="font-size:12.5px;color:var(--sub);">Nothing has moved yet. Prices start changing once the season is under way and managers begin transferring players in and out.</div>';
+  movers.slice(0,10).forEach(x=>{
+    const d=PRICEMOVE[x.n],up=d>0;
+    h+='<div class="row" style="cursor:pointer;" onclick="openPlayer(\''+esc(x.n)+'\')"><span class="tc" style="background:'+(TEAMCOL[x.t]||"#888")+'1f;color:'+(TEAMCOL[x.t]||"#888")+';">'+x.t+'</span><span class="pn">'+x.n+'<small>&pound;'+(PRICE[x.n]||0).toFixed(1)+'m now</small></span><span class="val" style="color:'+(up?"var(--a)":"var(--danger)")+';font-weight:800;">'+(up?"+":"")+d.toFixed(1)+'</span></div>';
+  });
+  h+='</div>';
+  // 2. Our own recorded history
+  h+='<div class="card"><div class="lbl">Recorded changes</div>';
+  if(PC.state==="loading")h+='<div style="font-size:12.5px;color:var(--sub);">Loading the change log&hellip;</div>';
+  else if(PC.state==="error")h+='<div style="font-size:12.5px;color:var(--warn);">Could not reach the change log. Reopen this section to retry.</div>';
+  else if(PC.log&&PC.log.length){
+    PC.log.slice(0,15).forEach(c=>{
+      const up=c.to>c.from;
+      h+='<div class="row"><span class="tc" style="background:'+(TEAMCOL[c.t]||"#888")+'1f;color:'+(TEAMCOL[c.t]||"#888")+';">'+c.t+'</span><span class="pn">'+c.n+'<small>'+c.d+'</small></span><span class="val" style="color:'+(up?"var(--a)":"var(--danger)")+';font-weight:800;">&pound;'+c.from.toFixed(1)+' &rarr; &pound;'+c.to.toFixed(1)+'</span></div>';
+    });
+  }else h+='<div style="font-size:12.5px;color:var(--sub);line-height:1.6;">No changes recorded yet. We started keeping our own daily record on <b>'+(PC.since||"today")+'</b>. The official game only ever publishes a player\'s current price and never its history, so from now on this log is the only place you can see exactly when each change happened.</div>';
+  h+='</div>';
+  // 3. Under pressure (estimate)
+  const mom=poolPlayers().map(x=>({x,m:momentumOf(x)})).filter(o=>o.m).sort((a,b)=>b.m.pressure-a.m.pressure);
+  h+='<div class="card"><div class="lbl">Under pressure <span style="text-transform:none;letter-spacing:0;">(estimate)</span></div>';
+  if(!mom.length)h+='<div style="font-size:12.5px;color:var(--sub);">Nobody is being transferred yet, so there is no pressure to measure. This fills in once the first gameweek opens.</div>';
+  else{
+    const rise=mom.filter(o=>o.m.net>0).slice(0,5),fall=mom.filter(o=>o.m.net<0).slice(-5).reverse();
+    if(rise.length){h+='<div style="font-size:11.5px;color:var(--sub);margin-bottom:2px;">Most likely to rise</div>';
+      rise.forEach(o=>{h+='<div class="row"><span class="tc" style="background:'+(TEAMCOL[o.x.t]||"#888")+'1f;color:'+(TEAMCOL[o.x.t]||"#888")+';">'+o.x.t+'</span><span class="pn">'+o.x.n+'<small>&pound;'+(PRICE[o.x.n]||0).toFixed(1)+'m &middot; '+(OWN[o.x.n]||0).toFixed(1)+'% owned</small></span><span class="val" style="color:var(--a);">+'+o.m.net.toLocaleString("en-GB")+'</span></div>';});}
+    if(fall.length){h+='<div style="font-size:11.5px;color:var(--sub);margin:8px 0 2px;">Most likely to fall</div>';
+      fall.forEach(o=>{h+='<div class="row"><span class="tc" style="background:'+(TEAMCOL[o.x.t]||"#888")+'1f;color:'+(TEAMCOL[o.x.t]||"#888")+';">'+o.x.t+'</span><span class="pn">'+o.x.n+'<small>&pound;'+(PRICE[o.x.n]||0).toFixed(1)+'m &middot; '+(OWN[o.x.n]||0).toFixed(1)+'% owned</small></span><span class="val" style="color:var(--danger);">'+o.m.net.toLocaleString("en-GB")+'</span></div>';});}
+    h+='<div style="font-size:11px;color:var(--sub);margin-top:7px;">Net transfers this gameweek, weighted by how many managers own him. The official game has never published how it decides price changes, so treat this as pressure, not a promise.</div>';
+  }
+  h+='</div>';
+  // 4. Your own exposure
+  const sq=trSquad();
+  h+='<div class="card"><div class="lbl">Your squad</div>';
+  if(!sq.players.length)h+='<div style="font-size:12.5px;color:var(--sub);">Link your team or build a squad and this will show which of your own players are gaining or losing you value.</div>';
+  else{
+    const moved=sq.players.filter(x=>PRICESEASON[x.n]);
+    const val=moved.reduce((s,x)=>s+PRICESEASON[x.n],0);
+    if(!moved.length)h+='<div style="font-size:12.5px;color:var(--sub);">None of your '+sq.players.length+' players has changed price yet, so your squad value is exactly what you paid.</div>';
+    else{
+      h+='<div style="font-size:13px;margin-bottom:6px;">Squad value change: <b style="color:'+(val>=0?"var(--a)":"var(--danger)")+';">'+(val>=0?"+":"")+'&pound;'+val.toFixed(1)+'m</b> since the season started.</div>';
+      moved.sort((a,b)=>PRICESEASON[b.n]-PRICESEASON[a.n]).forEach(x=>{
+        const d=PRICESEASON[x.n];
+        h+='<div class="row"><span class="tc" style="background:'+(TEAMCOL[x.t]||"#888")+'1f;color:'+(TEAMCOL[x.t]||"#888")+';">'+x.t+'</span><span class="pn">'+x.n+'</span><span class="val" style="color:'+(d>=0?"var(--a)":"var(--danger)")+';font-weight:800;">'+(d>=0?"+":"")+d.toFixed(1)+'</span></div>';});
+    }
+  }
+  h+='</div>';
+  return h;
 }
 // ---- Transfer planner ----
 // Two things the official API does not publish: how many free transfers you have, and

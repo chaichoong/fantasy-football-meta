@@ -93,6 +93,40 @@ async function takeSnapshot(env, force) {
   return { stored: "pred:gw" + next.id, players: bs.elements.length, fixtures: snap.fixtures.length, taken: snap.taken };
 }
 
+// Daily price recorder. The official API only ever exposes the CURRENT net price
+// change; it keeps no history. Recording one snapshot a day builds a real change log
+// we own, which is the only way to answer "when did he drop?" later in the season.
+// One write per day, plus a rolling log capped at 400 entries.
+async function takePriceSnapshot(env) {
+  const bs = await fetchJson("/bootstrap-static/");
+  const today = new Date().toISOString().slice(0, 10);
+  if (await env.PREDICTIONS.get("price:day:" + today)) return { skipped: "prices already stored for " + today };
+  const short = {};
+  bs.teams.forEach((t) => (short[t.id] = t.short_name));
+  const prices = {};
+  bs.elements.forEach((e) => (prices[e.id] = e.now_cost));
+
+  const prevRaw = await env.PREDICTIONS.get("price:latest");
+  const changes = [];
+  if (prevRaw) {
+    const prev = JSON.parse(prevRaw);
+    bs.elements.forEach((e) => {
+      const was = prev.prices[e.id];
+      if (was != null && was !== e.now_cost) {
+        changes.push({ id: e.id, n: e.web_name, t: short[e.team], from: was / 10, to: e.now_cost / 10, d: today });
+      }
+    });
+  }
+  await env.PREDICTIONS.put("price:day:" + today, JSON.stringify(prices), { expirationTtl: 60 * 60 * 24 * 120 });
+  await env.PREDICTIONS.put("price:latest", JSON.stringify({ date: today, prices }));
+  if (changes.length) {
+    const logRaw = await env.PREDICTIONS.get("price:changes");
+    const log = logRaw ? JSON.parse(logRaw) : [];
+    await env.PREDICTIONS.put("price:changes", JSON.stringify(changes.concat(log).slice(0, 400)));
+  }
+  return { stored: today, changes: changes.length, first: !prevRaw };
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -123,6 +157,14 @@ export default {
       if (!gw || !/^\d{1,2}$/.test(gw) || +gw < 1 || +gw > 38) return jsonResp({ error: "gw 1-38 required" }, 400);
       return proxy(UPSTREAM + "/entry/" + id + "/event/" + gw + "/picks/", ctx, 60);
     }
+    if (p === "/pricechanges") {
+      const v = await env.PREDICTIONS.get("price:changes");
+      const latest = await env.PREDICTIONS.get("price:latest");
+      return jsonResp({
+        changes: v ? JSON.parse(v) : [],
+        recordingSince: latest ? JSON.parse(latest).date : null,
+      });
+    }
     if (p === "/snapshots") {
       const list = await env.PREDICTIONS.list({ prefix: "pred:gw" });
       const snapshots = list.keys
@@ -140,15 +182,18 @@ export default {
     if (p === "/snap") {
       // Manual trigger for testing the pipeline; same immutability guard as the cron.
       try {
-        return jsonResp(await takeSnapshot(env, url.searchParams.get("force") === "1"));
+        const pred = await takeSnapshot(env, url.searchParams.get("force") === "1");
+        const price = await takePriceSnapshot(env);
+        return jsonResp({ predictions: pred, prices: price });
       } catch (e) {
         return jsonResp({ error: String(e.message || e) }, 502);
       }
     }
-    return jsonResp({ error: "not found", routes: ["/bootstrap", "/fixtures", "/live", "/entry", "/picks", "/snapshots", "/snapshot", "/snap"] }, 404);
+    return jsonResp({ error: "not found", routes: ["/bootstrap", "/fixtures", "/live", "/entry", "/picks", "/snapshots", "/snapshot", "/pricechanges", "/snap"] }, 404);
   },
 
   async scheduled(event, env, ctx) {
     ctx.waitUntil(takeSnapshot(env, false));
+    ctx.waitUntil(takePriceSnapshot(env));
   },
 };
