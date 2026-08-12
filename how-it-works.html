@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How FPL Season HQ works</title>
+<style>
+:root{--bg:#101418;--card:#1a2026;--card2:#20272e;--line:#2b333c;--txt:#e8ebee;--sub:#8b96a0;--a:#4cc38a;--b:#5aa9f0;--c:#6b7680;--warn:#e0a84c;--danger:#e08a76;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:15px;padding:12px;max-width:600px;margin:0 auto;line-height:1.55;}
+h1{font-size:19px;font-weight:600;margin-bottom:4px;}
+.lede{font-size:13.5px;color:var(--sub);margin-bottom:14px;}
+.back{display:inline-block;background:var(--card2);border:1px solid #3d4854;color:var(--txt);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;text-decoration:none;margin-bottom:16px;}
+h2{font-size:15.5px;font-weight:600;margin:22px 0 8px;padding-top:14px;border-top:1px solid var(--line);}
+h2:first-of-type{border-top:none;padding-top:0;}
+h3{font-size:13.5px;font-weight:600;margin:14px 0 4px;}
+p{font-size:14px;margin-bottom:9px;}
+ul{margin:0 0 10px 18px;}
+li{font-size:14px;margin-bottom:6px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:11px;}
+.card .lbl{font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
+.formula{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13.5px;font-weight:600;text-align:center;margin:10px 0;line-height:1.7;}
+.sub{color:var(--sub);font-size:13px;}
+b{font-weight:600;}
+.grade{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;margin-right:5px;}
+.gA{background:rgba(76,195,138,.15);color:var(--a);}
+.gB{background:rgba(90,169,240,.15);color:var(--b);}
+.gC{background:rgba(107,118,128,.2);color:var(--c);}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;}
+th,td{text-align:left;padding:6px 6px 6px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;font-weight:600;}
+.warn{border-color:rgba(224,168,76,.4);}
+.warn .lbl{color:var(--warn);}
+.foot{font-size:12.5px;color:var(--sub);margin:20px 0 30px;}
+</style>
+</head>
+<body>
+
+<h1>How FPL Season HQ works</h1>
+<p class="lede">A plain guide to what this thing is, what it can and cannot do, and how the scores were worked out.</p>
+<a class="back" href="index.html">&larr; Back to the app</a>
+
+<h2>What it is, in one paragraph</h2>
+<p>It is a single web page that helps you pick your Fantasy Premier League team each week. It holds the three squads from your draft (Kevin, Leo and James), a database of around 319 players with a score on each one, how hard every club's early fixtures are, and a recommended starting eleven for any gameweek you choose.</p>
+<p>It is a helper, not a robot. It suggests. You decide, and you still set your real team in the official FPL app.</p>
+
+<h2>The four tabs</h2>
+
+<div class="card">
+<div class="lbl">Squads</div>
+<p>The three drafted teams side by side, with a total for each. The total is just every player's value added up, so a bigger number means a stronger squad on paper. From draft night: Kevin 1001, James 830, Leo 807.</p>
+<p class="sub">Each player row shows: rank, grade, name, club, position, then two numbers. The first is that player's value out of 100. The second is his points per 90 minutes.</p>
+</div>
+
+<div class="card">
+<div class="lbl">Players</div>
+<p>Every player in the database, best first. Search by name or club, filter by position, or tap <b>Free only</b> to see who nobody drafted. Those are the players you could pick up.</p>
+<p class="sub">One quirk: with the filter on All it stops at 260 names to keep it quick. Tap a position filter to see every player in that position.</p>
+</div>
+
+<div class="card">
+<div class="lbl">Fixtures</div>
+<p>All 20 clubs ranked by how kind their first five games are, easiest at the top, plus a short note on each gameweek. Use it to spot a player who is about to get an easy run.</p>
+</div>
+
+<div class="card">
+<div class="lbl">GW Plan</div>
+<p>The useful one. Pick whose team you want (yours, Kevin's or James's) and pick a gameweek. It gives you:</p>
+<ul>
+<li>a <b>recommended eleven</b>, ordered by score</li>
+<li>your <b>bench</b>, so you can see who nearly made it</li>
+<li><b>waiver targets</b>: undrafted players who score higher than your weakest player in the same position, and it names who to drop</li>
+</ul>
+<p>Every player has a <b>Fit / Doubt / Out</b> button. Tap it to change it. Out drops him from the eleven, Doubt weakens him.</p>
+</div>
+
+<h2>The score: one formula, four parts</h2>
+<p>Everything in the GW Plan tab comes from a single sum:</p>
+
+<div class="formula">week score = quality &times; fixture &times; availability &times; momentum</div>
+
+<h3>1. Quality (the big one)</h3>
+<p>A fixed number out of 100 given to every player on draft night. Haaland is 100, the best midfielders are in the 80s and 90s, squad filler is in the 20s and 30s, and Ekitike is 5 because he is injured until spring.</p>
+<p>That number was built from three things:</p>
+<table>
+<tr><th>Part</th><th>Weight</th><th>What it measures</th></tr>
+<tr><td>Projected points</td><td>70%</td><td>Points per 90 minutes multiplied by the minutes he is expected to play. Minutes matter as much as talent. A brilliant sub who plays 20 minutes is worth less than a decent player who plays every week.</td></tr>
+<tr><td>Minutes certainty</td><td>20%</td><td>How sure we are he actually starts. New signings, new managers, players back from injury and crowded squads all lose marks here.</td></tr>
+<tr><td>Ceiling and edge</td><td>10%</td><td>How high he could go if things click, especially if last season's numbers make him look worse than he is.</td></tr>
+</table>
+<p><b>Quality never changes week to week.</b> That is deliberate. It means the squad totals cannot move around under you, and one bad Saturday does not rewrite everything.</p>
+
+<h3>2. Fixture</h3>
+<p>How easy that club's game is that week. An easy game multiplies a player up, a horrible one drags him down. For gameweeks 1 to 5 these are already in the file, from about 0.55 for a wipeout up to 1.35 for a great matchup. Man Utd in gameweek 4 is 0.6, because it is the Manchester derby.</p>
+<p>After gameweek 5 there are no fixture numbers in the file yet, so every club counts as neutral until someone pastes in new data.</p>
+
+<h3>3. Availability</h3>
+<p>Fit counts as 1, so no change. Doubt counts as 0.6, so he drops but stays pickable. Out counts as 0, so his score becomes zero and he falls out of the eleven. This comes from the Fit / Doubt / Out buttons you tap.</p>
+
+<h3>4. Momentum</h3>
+<p>A hot or cold streak, from minus 2 to plus 2, worth up to 20 per cent either way. It only appears when new data is pasted in. It is a tiebreaker between two similar players, not a reason to bin someone good.</p>
+
+<h2>What A, B and C mean</h2>
+<p><span class="grade gA">A</span> Cannot be replaced. If you lose him there is nothing else like him in the pool.</p>
+<p><span class="grade gB">B</span> A good, solid starter. If you miss out, someone similar still exists.</p>
+<p><span class="grade gC">C</span> Filler. There to complete the squad, and fine to drop for someone in form.</p>
+<p>The 45 drafted players got their grade by hand on draft night. Everyone else gets one automatically from their projected season points, using a different bar per position, because a good defender and a good midfielder do not score the same amounts. For example a midfielder needs 180 to hit A, a forward needs 140, a defender 160, a keeper 155.</p>
+<p>Grades are always about the <b>gap to the next best player in that position</b>, not raw points. That is why there are only two A grade defenders but five A grade midfielders. Defenders bunch together, so missing one costs you very little.</p>
+
+<h2>How the recommended eleven gets picked</h2>
+<p>It is a simple, honest sort. Best goalkeeper by score goes in. Then it works down everyone else by score, while making sure you end up with a legal formation: at least three defenders, at least three midfielders and at least one forward. Anyone who does not fit goes on the bench, best first.</p>
+<p>The waiver list then compares every undrafted player against your <b>weakest player in the same position</b>. If a free player beats him, it appears, with the swap spelled out. If nothing beats your squad, it tells you to hold instead of inventing a move.</p>
+
+<h2 id="cannot">What it does NOT do</h2>
+<div class="card warn">
+<div class="lbl">Read this bit properly</div>
+<ul>
+<li><b>It is not live.</b> Nothing updates by itself. The player projections are dated 4 August 2026, the fixture ratings 5 August 2026, and injuries 8 August 2026. If someone got injured after that, this page does not know.</li>
+<li><b>The Refresh live data button does not work here.</b> It only ever worked inside the Claude app. On this web link it will show a message telling you to paste data instead.</li>
+<li><b>These are predictions, not results.</b> No real FPL points, no league table, no live scores. It never finds out whether it was right.</li>
+<li><b>It is not connected to the official FPL game.</b> It cannot see your real team and it cannot make transfers. You still do all of that yourself.</li>
+<li><b>It does not pick a captain</b> or handle chips like Triple Captain and Bench Boost.</li>
+<li><b>Fixture difficulty only exists for gameweeks 1 to 5.</b> Choose a later week and every club is treated as average.</li>
+<li><b>It does not sync between devices.</b> Your Fit / Doubt / Out taps save to the phone or laptop you used, and only that one. Tapping things on your phone changes nothing on your dad's.</li>
+<li><b>It is one model's opinion.</b> All the numbers trace back to a single projection source plus some human judgement on top. Treat it as a strong second opinion, not the truth.</li>
+</ul>
+</div>
+
+<h2>How it was built</h2>
+<p>It is one file called <span class="sub">index.html</span>, about 37 kilobytes, and that file is the whole app. There is no server, no database, no account and no internet connection needed once the page has loaded. The player data is written straight into the file as a list, and the page draws the tabs from that list when you open it.</p>
+<p>Nothing you do gets sent anywhere. The only thing it stores is your Fit / Doubt / Out taps, and those sit in your own browser.</p>
+<p>It was built in a conversation with Claude across a few days, starting as a draft list, then a draft board, then this. The code lives publicly on GitHub so it can be updated later.</p>
+
+<h2>Using it during the season</h2>
+<ol style="margin:0 0 10px 18px;">
+<li style="font-size:14px;margin-bottom:6px;">Friday, before the deadline, open the GW Plan tab.</li>
+<li style="font-size:14px;margin-bottom:6px;">Ask Kevin for a fresh <b>data pack</b>, which is a block of text from Claude with the current gameweek, injuries and fixture ratings. Paste it in the box and hit Apply pack.</li>
+<li style="font-size:14px;margin-bottom:6px;">Check team news yourself and tap any Fit / Doubt / Out buttons that look wrong.</li>
+<li style="font-size:14px;margin-bottom:6px;">Read the recommended eleven, then set that team in the real FPL app.</li>
+<li style="font-size:14px;margin-bottom:6px;">Glance at the waiver list. One in, one out, and only if the gap is worth it.</li>
+</ol>
+<p>Two rules built into the thing that are worth knowing. Never drop an A grade because of one cold week. And a hot streak is a tiebreaker, not a plan.</p>
+
+<a class="back" href="index.html">&larr; Back to the app</a>
+<p class="foot">Data sources: player projections dated 4 August 2026, fixture model dated 5 August 2026, injury and transfer checks dated 8 August 2026. Season opens 23 August 2026.</p>
+
+</body>
+</html>
