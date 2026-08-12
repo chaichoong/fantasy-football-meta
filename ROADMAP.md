@@ -127,8 +127,16 @@ result; nothing in the accuracy record depends on Meta, so no history was invali
 
 ## Still open from Leo's mockup (not built)
 
-- **Transfers planner** and **Pro tools** — sidebar carries an honest "still being built,
-  nothing to buy yet" note rather than a dead link or a fake paywall.
+- ~~**Transfers planner**~~ ✅ DONE 12 Aug 2026. `planTransfers()`: every legal same-position
+  swap scored over a 1/3/5/8-GW horizon, constrained by bank, club cap and squad size;
+  best single, best pair (search over the top 60 singles, no brute force), and deduped
+  alternatives so each incoming player appears once. `verdictLine()` does the hit
+  arithmetic and gives ONE answer — it will tell you to do the single move when the pair
+  gains more raw points but nets less. Squad source: My Team picks when live, otherwise the
+  Builder squad. **Free transfers and (preseason) bank are user-set — the API publishes
+  neither; never fake them.** Selling price approximated at current price, stated on the page.
+- **Pro tools** — sidebar now says everything is free and open with nothing to buy. Keep it
+  truthful; do not add a fake paywall or sign-in.
 - ~~**My Team**~~ ✅ DONE 12 Aug 2026. Relay routes `/entry?id=` and `/picks?id=&gw=`
   (numeric-validated, public read-only, 404 passed through so "not published yet" is
   distinguishable from "relay broken"). My Team tab: id saved to localStorage, team

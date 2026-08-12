@@ -277,7 +277,7 @@ function fxOf(t){
 function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
 let tab="dash",posF="ALL",ownF="ALL",q="",sortMode="val";
 function esc(s){return s.replace(/'/g,"\\'")}
-const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
+const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",transfers:"Transfer Planner",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
 function render(){
   updateStrip();
   const pt=document.getElementById("pageTitle");
@@ -293,6 +293,7 @@ function render(){
   if(tab==="builder")return v.innerHTML=builderView();
   if(tab==="dash")return v.innerHTML=dashView();
   if(tab==="news")return v.innerHTML=newsView();
+  if(tab==="transfers")return v.innerHTML=transfersView();
   if(tab==="myteam"){if(MT.id&&MT.state==="idle"){MT.state="loading";setTimeout(loadMyTeam,0);}return v.innerHTML=myTeamView();}
   if(tab==="picks")return v.innerHTML=bestPicksView();
   if(tab==="compare")return v.innerHTML=compareView();
@@ -795,6 +796,118 @@ function myTeamView(){
 function mtRow(r,badge){
   const c=confidenceOf(r.x);
   return '<div class="row" style="cursor:pointer;" onclick="openPlayer(\''+esc(r.x.n)+'\')"><span class="tc" style="background:'+(TEAMCOL[r.x.t]||"#888")+'1f;color:'+(TEAMCOL[r.x.t]||"#888")+';">'+r.x.t+'</span><span class="pn">'+r.x.n+(badge?' <span class="conf" style="background:var(--accent)1f;color:var(--accent);">'+badge+'</span>':'')+'<small>'+POSNAME[r.x.p]+' &middot; &pound;'+(PRICE[r.x.n]||0).toFixed(1)+'m'+(r.x.ext?' &middot; not in our rated list':'')+'</small></span><span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span><span class="val">'+r.e.toFixed(1)+'</span></div>';
+}
+// ---- Transfer planner ----
+// Two things the official API does not publish: how many free transfers you have, and
+// (before the season) your bank. Both are inputs you set rather than numbers we invent.
+// Selling price is approximated by current price — the real game sells at purchase price
+// plus half the profit, so a long-held riser is worth slightly more than shown.
+let TR={ft:1,horizon:5,bankOverride:null,ready:false};
+function trSquad(){
+  if(MT.picks&&MT.picks.picks){
+    const xs=MT.picks.picks.map(pk=>ensurePlayer(pk.element)).filter(Boolean);
+    if(xs.length)return {players:xs,src:"myteam"};
+  }
+  const flat=squadFlat();
+  if(flat.length===15)return {players:flat.map(n=>P.find(y=>y.n===n)).filter(Boolean),src:"builder"};
+  return {players:[],src:"none"};
+}
+function trBank(sq){
+  if(TR.bankOverride!==null)return TR.bankOverride;
+  if(sq.src==="myteam"&&MT.picks.entry_history&&MT.picks.entry_history.bank!=null)return MT.picks.entry_history.bank/10;
+  if(sq.src==="builder")return Math.max(0,100-squadSpent());
+  return 0;
+}
+function horizonPts(x,g0,h){let s=0;for(let g=g0;g<Math.min(39,g0+h);g++)s+=predPtsAt(x,g);return s;}
+function planTransfers(){
+  const sq=trSquad();
+  if(!sq.players.length)return null;
+  const g0=META.gw||1,h=TR.horizon,bank=trBank(sq);
+  const owned=new Set(sq.players.map(x=>x.n));
+  const clubCounts={};sq.players.forEach(x=>{clubCounts[x.t]=(clubCounts[x.t]||0)+1});
+  const cands=poolPlayers().filter(x=>!owned.has(x.n));
+  const hz={};sq.players.concat(cands).forEach(x=>{hz[x.n]=horizonPts(x,g0,h)});
+  const singles=[];
+  sq.players.forEach(out=>{
+    cands.forEach(inn=>{
+      if(inn.p!==out.p)return;
+      const price=(PRICE[inn.n]||0)-(PRICE[out.n]||0);
+      if(price>bank+0.001)return;
+      if(inn.t!==out.t&&(clubCounts[inn.t]||0)>=3)return;
+      const gain=hz[inn.n]-hz[out.n];
+      if(gain>0)singles.push({out,inn,gain,cost:price});
+    });
+  });
+  singles.sort((a,b)=>b.gain-a.gain);
+  const seenIn=new Set(),seenOut=new Set(),varied=[];
+  singles.forEach(m=>{if(seenIn.has(m.inn.n)||seenOut.has(m.out.n))return;seenIn.add(m.inn.n);seenOut.add(m.out.n);varied.push(m);});
+  // Best pair: search the strongest singles for a compatible partner. Small and exact
+  // enough at this size; no brute force over the whole pool.
+  const pool=singles.slice(0,60);
+  let pair=null;
+  for(let i=0;i<pool.length;i++)for(let j=i+1;j<pool.length;j++){
+    const a=pool[i],b=pool[j];
+    if(a.out.n===b.out.n||a.inn.n===b.inn.n)continue;
+    if(a.cost+b.cost>bank+0.001)continue;
+    const cc={...clubCounts};
+    cc[a.out.t]--;cc[b.out.t]--;cc[a.inn.t]=(cc[a.inn.t]||0)+1;cc[b.inn.t]=(cc[b.inn.t]||0)+1;
+    if(Math.max.apply(null,Object.values(cc))>3)continue;
+    const g=a.gain+b.gain;
+    if(!pair||g>pair.gain)pair={moves:[a,b],gain:g,cost:a.cost+b.cost};
+  }
+  return {sq,bank,singles:varied.slice(0,6),allSingles:singles,pair,h,g0};
+}
+function hitCost(n){return Math.max(0,n-TR.ft)*4;}
+function verdictLine(gain,n){
+  const hit=hitCost(n),net=gain-hit;
+  if(hit===0)return {net,txt:'<b style="color:var(--a);">Make it.</b> Free transfer'+(n>1?"s":"")+', so the whole '+gain.toFixed(1)+' points is profit.',ok:true};
+  if(net>4)return {net,txt:'<b style="color:var(--a);">Worth the hit.</b> '+gain.toFixed(1)+' points gained less '+hit+' for the hit leaves <b>+'+net.toFixed(1)+'</b>.',ok:true};
+  if(net>0)return {net,txt:'<b style="color:var(--warn);">Marginal.</b> Only <b>+'+net.toFixed(1)+'</b> after the '+hit+'-point hit. Most weeks, hold and take it free next week.',ok:false};
+  return {net,txt:'<b style="color:var(--danger);">Do not take the hit.</b> '+gain.toFixed(1)+' points does not cover the '+hit+'-point cost.',ok:false};
+}
+function moveRow(m){
+  return '<div class="row" style="cursor:pointer;" onclick="CMP=[\''+esc(m.out.n)+'\',\''+esc(m.inn.n)+'\'];tab=\'compare\';render()">'
+    +'<span class="tc" style="background:'+(TEAMCOL[m.out.t]||"#888")+'1f;color:'+(TEAMCOL[m.out.t]||"#888")+';">'+m.out.t+'</span>'
+    +'<span class="pn">'+m.out.n+' &rarr; <b>'+m.inn.n+'</b><small>'+(m.cost>0?"costs &pound;"+m.cost.toFixed(1)+"m":m.cost<0?"frees &pound;"+(-m.cost).toFixed(1)+"m":"same price")+'</small></span>'
+    +'<span class="val" style="color:var(--a);font-weight:800;">+'+m.gain.toFixed(1)+'</span></div>';
+}
+function transfersView(){
+  if(!LIVEOK)return '<div class="card"><div class="lbl">Connecting</div><div style="font-size:13px;">The planner needs live prices and fixtures. '+(liveTries>3?"Reopen to retry.":"One moment&hellip;")+'</div></div>';
+  const plan=planTransfers();
+  let h='<div class="note"><b>Should I make a transfer, and is it worth a hit?</b> The planner compares every legal swap for your squad over the next few gameweeks, then tells you whether the gain covers the 4-point cost. Two things the official game does not publish are your free transfers and, before the season starts, your bank, so you set those yourself.</div>';
+  if(!plan)return h+'<div class="card"><div class="lbl">No squad yet</div><div style="font-size:13px;line-height:1.6;">The planner needs a squad to work from. Either link your real team on <b>My Team</b>, or build a full 15 in the <b>Squad Builder</b>.</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" onclick="tab=\'builder\';render()">Open Squad Builder</button><button class="btn ghost" onclick="tab=\'myteam\';render()">Link my team</button></div></div>';
+  const srcLabel=plan.sq.src==="myteam"?"your linked FPL team":"the squad you built in the Squad Builder";
+  h+='<div class="card"><div class="lbl">Setup</div>';
+  h+='<div style="font-size:12.5px;color:var(--sub);margin-bottom:9px;">Working from <b style="color:var(--txt);">'+srcLabel+'</b> &middot; bank &pound;'+plan.bank.toFixed(1)+'m &middot; gameweeks '+plan.g0+'&ndash;'+Math.min(38,plan.g0+plan.h-1)+'</div>';
+  h+='<div style="font-size:11.5px;color:var(--sub);margin-bottom:4px;">Free transfers</div><div class="filters">'+[0,1,2,3,4,5].map(n=>'<button onclick="TR.ft='+n+';render()" class="'+(TR.ft===n?"on":"")+'">'+n+'</button>').join("")+'</div>';
+  h+='<div style="font-size:11.5px;color:var(--sub);margin-bottom:4px;">Look ahead</div><div class="filters">'+[1,3,5,8].map(n=>'<button onclick="TR.horizon='+n+';render()" class="'+(TR.horizon===n?"on":"")+'">'+n+' GW'+(n>1?"s":"")+'</button>').join("")+'</div>';
+  h+='</div>';
+  if(!plan.singles.length)return h+'<div class="card"><div class="lbl">Hold</div><div style="font-size:13px;">No legal transfer improves this squad over the next '+plan.h+' gameweek'+(plan.h>1?"s":"")+'. Save the transfer.</div></div>';
+  // Best single
+  const best=plan.singles[0],v1=verdictLine(best.gain,1);
+  h+='<div class="card"><div class="lbl">&#128260; Best single transfer</div>'+moveRow(best);
+  h+='<div style="font-size:12.5px;line-height:1.6;margin-top:8px;">'+v1.txt+'</div>';
+  h+='<div style="font-size:11.5px;color:var(--sub);margin-top:5px;">Gain is over '+plan.h+' gameweek'+(plan.h>1?"s":"")+', not one. Tap the row to compare the two players.</div></div>';
+  // Best pair
+  if(plan.pair){
+    const v2=verdictLine(plan.pair.gain,2);
+    const singleWins=v1.ok&&v2.net<=v1.net;
+    h+='<div class="card"><div class="lbl">&#128260;&#128260; Best pair of transfers</div>';
+    plan.pair.moves.forEach(m=>{h+=moveRow(m)});
+    h+='<div style="font-size:12.5px;line-height:1.6;margin-top:8px;">'
+      +(singleWins
+        ? '<b style="color:var(--warn);">Do the single instead.</b> The pair gains more raw points ('+plan.pair.gain.toFixed(1)+' v '+best.gain.toFixed(1)+') but nets <b>+'+v2.net.toFixed(1)+'</b> after the hit against <b>+'+v1.net.toFixed(1)+'</b> for one move.'
+        : v2.txt)
+      +'</div></div>';
+  }
+  // Runners up
+  if(plan.singles.length>1){
+    h+='<div class="card"><div class="lbl">Other moves worth knowing</div>';
+    plan.singles.slice(1).forEach(m=>{h+=moveRow(m)});
+    h+='</div>';
+  }
+  h+='<div class="note" style="margin-top:4px;"><b>Two honest limits.</b> Selling price is taken as today\'s price; the real game gives you back what you paid plus half the profit, so a player who has risen is worth a little more than shown. And predictions get softer the further out you look, so an 8-gameweek plan is a direction, not a promise.</div>';
+  return h;
 }
 // ---- Dashboard (phase 8) ----
 function initials(n){const p=n.split(" ");return (p[0][0]+(p.length>1?p[p.length-1][0]:"")).toUpperCase();}
