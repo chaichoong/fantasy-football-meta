@@ -209,12 +209,23 @@ Decided by what the product actually needs, not by matching OD for its own sake.
 | Data/API | **Cloudflare Worker** `fpl-relay` | Already live. Adds CORS to the official feed, caches it, records prices. |
 | Storage | **Cloudflare KV** `PREDICTIONS` | Prediction snapshots + the daily price history. |
 | Source | **GitHub** `chaichoong/fantasy-football-meta` | Source of truth; also still serves GitHub Pages as a fallback host. |
-| Domain | **Namecheap** → Cloudflare DNS | fantasyfootballmeta.co.uk. |
+| Domain | **Namecheap DNS** (not Cloudflare DNS) | www.fantasyfootballmeta.co.uk is the canonical URL. |
 
 **Explicitly NOT used, and why:**
 - **Vercel** — nothing to server-render. Cloudflare Pages already hosts static sites here, and the Worker + KV are on Cloudflare, so adding Vercel means two vendors for one small app.
 - **Hostinger** — no need for shared hosting at all.
 - **Supabase** — there is no user data, no accounts and no relational data. Everything a user has lives on their own device by design. Revisit ONLY if accounts are built, and even then Workers + D1/KV may be enough.
+
+**DNS, and why www is canonical (12 Aug 2026).** DNS stayed at Namecheap because adding a
+zone to Cloudflare needs dashboard login and the API token has no zone-create permission.
+Consequence: `www` uses a real CNAME to the Pages project and verified fine (status active,
+cert issued). The **apex cannot verify** — Namecheap flattens ALIAS into A records, so
+Cloudflare never sees a CNAME and reports "CNAME record not set". The apex is therefore a
+Namecheap URL Redirect Record to https://www.fantasyfootballmeta.co.uk, and its HTTPS
+depends on Namecheap provisioning a redirect certificate.
+**To make the bare domain first-class:** add the site in the Cloudflare dashboard (needs
+Kevin's password), switch the Namecheap nameservers to the pair Cloudflare issues, then the
+apex works natively via CNAME flattening and the redirect record can be deleted.
 
 **Deploy note:** the Pages project was created by API and deploys via `wrangler pages deploy`.
 To make it auto-deploy on push, connect the repo in the Cloudflare dashboard (OAuth).
