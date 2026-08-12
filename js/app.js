@@ -14,7 +14,7 @@ function saveInj(){try{localStorage.setItem("fplHQinj",JSON.stringify(INJ));loca
 // Official FPL feed via our relay (the API blocks browsers directly; the relay adds CORS + 15-min cache).
 const RELAY="https://fpl-relay.kevinbrittain.workers.dev";
 
-let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},LIVEFX=null,LIVEOK=false,DEADLINE="";
+let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},XG={},LIVEFX=null,LIVEOK=false,DEADLINE="";
 function fdrMult(d){return {1:1.35,2:1.25,3:1.0,4:0.8,5:0.6}[d]||1;}
 async function loadLive(){
   lastLoad=Date.now();
@@ -25,7 +25,7 @@ async function loadLive(){
     ]);
     const byId={};bs.elements.forEach(e=>byId[e.id]=e);
     const short={};bs.teams.forEach(t=>short[t.id]=t.short_name);
-    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};OWN={};
+    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};OWN={};XG={};
     P.forEach(x=>{
       const e=byId[FPLID[x.n]];if(!e)return;
       PRICE[x.n]=e.now_cost/10;
@@ -33,6 +33,7 @@ async function loadLive(){
       if(e.chance_of_playing_next_round!=null&&e.chance_of_playing_next_round<100)CHANCE[x.n]=e.chance_of_playing_next_round;
       LIVEEL[x.n]={form:parseFloat(e.form)||0,ep:parseFloat(e.ep_next)||0};
       OWN[x.n]=parseFloat(e.selected_by_percent)||0;
+      XG[x.n]={xg:parseFloat(e.expected_goals_per_90)||0,xa:parseFloat(e.expected_assists_per_90)||0,xgc:parseFloat(e.expected_goals_conceded_per_90)||0,mins:e.minutes||0,ppg:parseFloat(e.points_per_game)||0};
     });
     LIVEFX={};
     fx.forEach(f=>{
@@ -126,6 +127,33 @@ function confidenceOf(x){
   if(f.fx>0&&f.fx<0.9)risk.push("tough fixture");
   if(f.fx===0)risk.push("no fixture this gameweek");
   return {pct,band:band[1],col:band[2],why,risk};
+}
+// ---- Event probabilities (phase 7) ----
+// Poisson from the official expected-goals suite. Rates are per 90 minutes played,
+// so they scale by expected minutes and by the fixture (attacking rates rise in an
+// easy game, conceding falls). Returns null when the player has no minutes on
+// record — an honest "not enough data" beats a fabricated 0%.
+function eventProbs(x){
+  const d=XG[x.n];
+  if(!d||d.mins<180)return null;              // under 2 full matches of evidence
+  const sp=startProb(x)/100;
+  if(sp===0)return {ruledOut:true};
+  const fx=fxMult(x.t);
+  if(fx===0)return {blank:true};
+  const mins=sp*82+(1-sp)*22;                  // starters ~82 mins, non-starters ~22
+  const share=mins/90;
+  const lamG=d.xg*share*fx, lamA=d.xa*share*fx;
+  const pG=1-Math.exp(-lamG), pA=1-Math.exp(-lamA);
+  const p60=sp*0.92;                           // starters usually see 60 minutes
+  let pCS=null;
+  if(d.xgc>0&&(x.p==="G"||x.p==="D")){
+    const lamC=d.xgc/(fx||1);
+    pCS=Math.exp(-lamC)*p60;
+  }
+  return {pG,pA,p60,pCS,any:1-(1-pG)*(1-pA),mins:Math.round(mins),xg:d.xg,xa:d.xa,xgc:d.xgc,sample:d.mins};
+}
+function pctBar(label,v,col){
+  return '<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;"><span>'+label+'</span><span style="font-weight:700;color:'+(col||"var(--a)")+';">'+Math.round(v*100)+'%</span></div><div class="bar"><i style="width:'+Math.min(100,v*100)+'%;background:'+(col||"var(--a)")+';"></i></div></div>';
 }
 function confChip(x){const c=confidenceOf(x);return '<span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span>';}
 let MCACHE={};
@@ -224,6 +252,7 @@ let tab="squads",posF="ALL",ownF="ALL",q="",sortMode="val";
 function esc(s){return s.replace(/'/g,"\\'")}
 function render(){
   updateStrip();
+  if(FOCUS){document.getElementById("view").innerHTML=playerView();document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("on"));return;}
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
   const v=document.getElementById("view");
   if(tab==="squads")return v.innerHTML=squadsView();
@@ -250,8 +279,9 @@ function rowHtml(x,showOwner){
   const st=statusOf(x.n);
   const flag=st===2?'<span style="font-size:10px;font-weight:700;color:#e08a76;flex-shrink:0;">OUT</span>':(CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'');
   const club=showOwner?'<span class="tc" style="background:'+(TEAMCOL[x.t]||'#888')+'22;color:'+(TEAMCOL[x.t]||'#aaa')+';">'+x.t+'</span>':'';
+  const open=' style="cursor:pointer;" onclick="openPlayer(\''+esc(x.n)+'\')"';
   const small=(showOwner?'':x.t+' ')+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'');
-  return '<div class="row"><span class="rk">'+x.r+'</span><span class="gr '+x.g+'">'+x.g+'</span>'+club+'<span class="pn">'+x.n+'<small>'+small+'</small></span>'+flag+'<span class="val">'+x.v+' &middot; '+x.pp.toFixed(1)+'</span>'+(showOwner?'<span class="own '+x.o+'">'+(x.o==="F"?"Free":NAMES[x.o])+'</span>':'')+'</div>';
+  return '<div class="row"'+open+'><span class="rk">'+x.r+'</span><span class="gr '+x.g+'">'+x.g+'</span>'+club+'<span class="pn">'+x.n+'<small>'+small+'</small></span>'+flag+'<span class="val">'+x.v+' &middot; '+x.pp.toFixed(1)+'</span>'+(showOwner?'<span class="own '+x.o+'">'+(x.o==="F"?"Free":NAMES[x.o])+'</span>':'')+'</div>';
 }
 function playersView(){
   let h='<input type="text" id="srch" placeholder="Search player or team" value="'+q+'" oninput="q=this.value;render();document.getElementById(\'srch\').focus();const el=document.getElementById(\'srch\');el.setSelectionRange(el.value.length,el.value.length);">';
@@ -422,7 +452,7 @@ let bpSource="K";
 function ceilingOf(x){return x.pp*fxMult(x.t)*(statusOf(x.n)===2?0:1);}
 function pickRow(x,extra,click){
   const c=confidenceOf(x);
-  return '<div class="row"'+(click?' style="cursor:pointer;" onclick="'+click+'"':'')+'><span class="tc" style="background:'+(TEAMCOL[x.t]||"#888")+'22;color:'+(TEAMCOL[x.t]||"#aaa")+';">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+(extra?' &middot; '+extra:'')+'</small></span><span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span><span class="val">'+predPts(x).toFixed(1)+'</span></div>';
+  return '<div class="row" style="cursor:pointer;" onclick="'+(click||"openPlayer('"+esc(x.n)+"')")+'"><span class="tc" style="background:'+(TEAMCOL[x.t]||"#888")+'22;color:'+(TEAMCOL[x.t]||"#aaa")+';">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+(extra?' &middot; '+extra:'')+'</small></span><span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span><span class="val">'+predPts(x).toFixed(1)+'</span></div>';
 }
 function bestPicksView(){
   if(!LIVEOK)return '<div class="card"><div class="lbl">Needs live data</div><div style="font-size:13px;">Best Picks uses live prices, form and team news. '+(liveTries>3?"Tap a tab to retry.":"Connecting&hellip;")+'</div></div>';
@@ -538,6 +568,63 @@ function compareView(){
   h+='<div>&#128737; Safest pick: <b>'+ps.slice().sort((a,b)=>confidenceOf(b).pct-confidenceOf(a).pct)[0].n+'</b></div>';
   h+='</div>';
   h+='<div style="font-size:12.5px;color:var(--sub);margin-top:8px;line-height:1.6;border-top:1px solid var(--line);padding-top:7px;"><b style="color:var(--txt);">Why?</b> '+cmpWhy(win.x,second.x)+'</div>';
+  h+='</div>';
+  return h;
+}
+// ---- Player profile (phase 7) ----
+let FOCUS=null,focusFrom="players";
+function openPlayer(n){FOCUS=n;focusFrom=tab;window.scrollTo(0,0);render();}
+function closePlayer(){FOCUS=null;render();}
+function starsFor(m){const s=m>=1.25?5:m>=1.1?4:m>=0.95?3:m>=0.75?2:m>0?1:0;return s===0?'<span style="color:var(--sub);">blank</span>':'<span style="color:var(--accent-gold,#C6A15B);letter-spacing:1px;">'+"\u2605".repeat(s)+'</span>';}
+function playerView(){
+  const x=P.find(y=>y.n===FOCUS);
+  if(!x)return '<div class="card">Player not found.</div>';
+  const m=metaParts(x),c=confidenceOf(x),f=predParts(x),ev=eventProbs(x),g0=META.gw||1;
+  let h='<button onclick="closePlayer()" style="background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:600;margin-bottom:10px;">&larr; Back</button>';
+  // Header
+  h+='<div class="card"><div style="display:flex;align-items:center;gap:10px;">';
+  h+='<div style="width:46px;height:46px;border-radius:10px;background:'+(TEAMCOL[x.t]||"#888")+'22;color:'+(TEAMCOL[x.t]||"#aaa")+';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;">'+x.t+'</div>';
+  h+='<div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:700;">'+x.n+'</div><div style="font-size:12px;color:var(--sub);">'+POSNAME[x.p]+' &middot; &pound;'+(PRICE[x.n]||0).toFixed(1)+'m &middot; '+(OWN[x.n]||0).toFixed(1)+'% owned &middot; '+(x.o==="F"?"undrafted":NAMES[x.o]+"'s")+'</div></div>';
+  h+='<div style="text-align:right;"><div style="font-size:24px;font-weight:800;color:var(--a);line-height:1;">'+m.total+'</div><div style="font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;">Meta</div></div>';
+  h+='</div>';
+  h+='<div style="display:flex;gap:8px;margin-top:10px;">';
+  h+='<div style="flex:1;background:var(--card2);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:800;">'+f.pred.toFixed(1)+'</div><div style="font-size:10px;color:var(--sub);">predicted GW'+g0+'</div></div>';
+  h+='<div style="flex:1;background:var(--card2);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:800;color:'+c.col+';">'+c.pct+'%</div><div style="font-size:10px;color:var(--sub);">confidence</div></div>';
+  h+='<div style="flex:1;background:var(--card2);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:18px;font-weight:800;">'+Math.round(startProb(x))+'%</div><div style="font-size:10px;color:var(--sub);">start chance</div></div>';
+  h+='</div></div>';
+  // Event probabilities
+  h+='<div class="card"><div class="lbl">What he is likely to DO in GW'+g0+'</div>';
+  if(!ev)h+='<div style="font-size:12.5px;color:var(--sub);">Not enough match evidence yet. He has '+((XG[x.n]||{}).mins||0)+' minutes on record, and these probabilities need at least 180. They appear once he has played.</div>';
+  else if(ev.ruledOut)h+='<div style="font-size:12.5px;color:#e08a76;">Ruled out of this gameweek, so every probability is zero.</div>';
+  else if(ev.blank)h+='<div style="font-size:12.5px;color:var(--sub);">'+x.t+' have no fixture in GW'+g0+' (blank gameweek).</div>';
+  else{
+    h+=pctBar("Plays 60+ minutes",ev.p60);
+    h+=pctBar("Scores a goal",ev.pG);
+    h+=pctBar("Gets an assist",ev.pA);
+    h+=pctBar("Any attacking return",ev.any,"var(--b)");
+    if(ev.pCS!==null)h+=pctBar("Clean sheet",ev.pCS,"var(--b)");
+    h+='<div style="font-size:11.5px;color:var(--sub);line-height:1.7;border-top:1px solid var(--line);padding-top:6px;">From his official expected-goals rates ('+ev.xg.toFixed(2)+' xG and '+ev.xa.toFixed(2)+' xA per 90'+(ev.pCS!==null?', '+ev.xgc.toFixed(2)+' conceded per 90':'')+') over '+ev.sample+' minutes played, scaled to about '+ev.mins+' minutes in this fixture. Probabilities assume goals arrive at random within that rate.</div>';
+  }
+  h+='</div>';
+  // Meta breakdown
+  h+='<div class="card"><div class="lbl">Why Meta '+m.total+'?</div><div style="font-size:12.5px;line-height:1.9;">';
+  m.parts.forEach(pt=>{h+='<div style="display:flex;justify-content:space-between;"><span style="color:var(--sub);">'+pt[0]+' <span style="font-size:10.5px;">('+Math.round(pt[1]/m.wsum*100)+'%)</span></span><span'+(pt[2]===null?' style="color:var(--sub);"':'')+'>'+(pt[2]===null?"no data yet":Math.round(pt[2])+"/100")+'</span></div>';});
+  h+='</div></div>';
+  // Confidence reasoning
+  h+='<div class="card"><div class="lbl">Confidence</div><div style="font-size:13px;font-weight:700;color:'+c.col+';margin-bottom:4px;">'+c.band+' &middot; '+c.pct+'%</div><div style="font-size:12.5px;line-height:1.7;">';
+  if(c.why.length)h+='<div>&#10003; '+c.why.join(", ")+'</div>';
+  if(c.risk.length)h+='<div style="color:var(--warn);">&#9888; '+c.risk.join(", ")+'</div>';
+  h+='</div></div>';
+  // Next 6 gameweeks
+  h+='<div class="card"><div class="lbl">Next 6 gameweeks</div>';
+  for(let g=g0;g<Math.min(39,g0+6);g++){
+    const mm=fxMult(x.t,g),pp=predPtsAt(x,g);
+    h+='<div class="row"><span class="rk">GW'+g+'</span><span class="pn">'+starsFor(mm)+(mm>1.5?' <span style="font-size:10px;color:var(--a);">double</span>':'')+'</span><span class="val">'+pp.toFixed(1)+'</span></div>';
+  }
+  h+='<div style="font-size:11.5px;color:var(--sub);margin-top:6px;">Stars are that club\'s fixture difficulty; the number is his predicted points that week.</div></div>';
+  // Actions
+  h+='<div style="display:flex;gap:6px;">';
+  h+='<button onclick="CMP=[\''+esc(x.n)+'\'];findAlternatives();tab=\'compare\';FOCUS=null;render()" style="flex:1;background:var(--card2);border:1px solid var(--a);color:var(--a);border-radius:8px;padding:9px 0;font-size:12.5px;font-weight:700;">Compare with alternatives</button>';
   h+='</div>';
   return h;
 }

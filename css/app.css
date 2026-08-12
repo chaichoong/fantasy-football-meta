@@ -64,3 +64,6 @@ select{background:var(--card2);border:1px solid var(--line);color:var(--txt);bor
 .crow:last-child{border-bottom:none;}
 .ck{flex:1;min-width:0;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cv{width:52px;text-align:right;flex-shrink:0;}
+
+/* Player profile (phase 7) */
+:root{--accent-gold:#C6A15B;}

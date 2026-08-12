@@ -91,10 +91,19 @@ transparent Meta Rating, comparisons that end in a verdict, confidence on every 
 and a public accuracy record. Every future feature should answer "what do I do?" before it
 answers "what is the number?".
 
-**Phase 7 — Player prediction page.** Per player: goal %, assist %, clean-sheet %,
-60+ minutes %, derived from the feed's expected_goals/assists per-90 suite (confirmed
-present 12 Aug) + start probability + written reason. Match predictor stays parked until
-this lands; team-level xG aggregates may then make a modest win/draw/loss card honest.
+**Phase 7 — Player prediction page. ✅ DONE 12 Aug 2026**
+`eventProbs()` = Poisson off the official expected-goals suite (xG/90, xA/90, xGC/90),
+scaled by expected minutes (start prob → ~82 mins starter / ~22 sub) and by fixture
+(attacking rates × fixture multiplier, conceding ÷ it). Gives P(goal), P(assist),
+P(60+ mins), P(any return), and P(clean sheet) for GK/DEF. **Returns null under 180
+minutes of evidence — the page says "not enough evidence yet" rather than showing 0%.**
+Only 335 of 581 players have xG data, so this guard matters. Ruled-out and blank-gameweek
+cases handled separately. Player profile opens from any row anywhere (`openPlayer()`):
+header, event probabilities, Meta breakdown, confidence reasoning, next-6-GW fixture
+stars with per-week predicted points, and a compare-with-alternatives action.
+NOTE: event probabilities are deliberately NOT wired into the headline predicted-points
+number. Two competing points figures is exactly the metric inconsistency that burned
+Kevin in the first build — the blend stays the single source of the number.
 
 **Phase 8 — Visual redesign.** Premier League-inspired identity of our own (never copied
 branding): dashboard command-centre homepage, player cards, pitch UI. Player photos remain
