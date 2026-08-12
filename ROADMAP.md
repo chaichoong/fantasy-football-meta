@@ -129,8 +129,16 @@ result; nothing in the accuracy record depends on Meta, so no history was invali
 
 - **Transfers planner** and **Pro tools** — sidebar carries an honest "still being built,
   nothing to buy yet" note rather than a dead link or a fake paywall.
-- **My Team** (link an official FPL team id and analyse it) — the feed exposes
-  `/entry/{id}/` endpoints; would need a relay route. Natural next build.
+- ~~**My Team**~~ ✅ DONE 12 Aug 2026. Relay routes `/entry?id=` and `/picks?id=&gw=`
+  (numeric-validated, public read-only, 404 passed through so "not published yet" is
+  distinguishable from "relay broken"). My Team tab: id saved to localStorage, team
+  verified on load, then captain check, your-XI-vs-model with the points each swap is
+  worth, warnings, transfer targets. `ensurePlayer()` synthesises a rateable record from
+  the feed for players outside the curated 319 (last season's points as index proxy) and
+  flags them `ext` so they never enter the ranked pools or the optimiser.
+  **Preseason constraint:** the official game 404s all picks until the first deadline, so
+  the tab confirms the team and waits. Verified against a simulated squad, since no real
+  picks exist yet — re-verify against a real team after the GW1 deadline.
 - **Price Changes** section — the data (`cost_change_event`) is present but zero all
   preseason, so it renders as the adaptive hero card until prices actually move.
 - **Login / accounts** — nothing built, nothing collected. Do not build a fake sign-in.

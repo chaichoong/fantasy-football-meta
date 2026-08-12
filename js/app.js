@@ -14,7 +14,7 @@ function saveInj(){try{localStorage.setItem("fplHQinj",JSON.stringify(INJ));loca
 // Official FPL feed via our relay (the API blocks browsers directly; the relay adds CORS + 15-min cache).
 const RELAY="https://fpl-relay.kevinbrittain.workers.dev";
 
-let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},XG={},PRICEMOVE={},NEWS=[],LIVEFX=null,LIVEOK=false,DEADLINE="";
+let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},XG={},PRICEMOVE={},NEWS=[],ELS={},TEAMSHORT={},LIVEFX=null,LIVEOK=false,DEADLINE="";
 function fdrMult(d){return {1:1.35,2:1.25,3:1.0,4:0.8,5:0.6}[d]||1;}
 async function loadLive(){
   lastLoad=Date.now();
@@ -25,6 +25,7 @@ async function loadLive(){
     ]);
     const byId={};bs.elements.forEach(e=>byId[e.id]=e);
     const short={};bs.teams.forEach(t=>short[t.id]=t.short_name);
+    ELS=byId;TEAMSHORT=short;
     LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};OWN={};XG={};PRICEMOVE={};
     P.forEach(x=>{
       const e=byId[FPLID[x.n]];if(!e)return;
@@ -276,7 +277,7 @@ function fxOf(t){
 function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
 let tab="dash",posF="ALL",ownF="ALL",q="",sortMode="val";
 function esc(s){return s.replace(/'/g,"\\'")}
-const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
+const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
 function render(){
   updateStrip();
   const pt=document.getElementById("pageTitle");
@@ -292,6 +293,7 @@ function render(){
   if(tab==="builder")return v.innerHTML=builderView();
   if(tab==="dash")return v.innerHTML=dashView();
   if(tab==="news")return v.innerHTML=newsView();
+  if(tab==="myteam"){if(MT.id&&MT.state==="idle"){MT.state="loading";setTimeout(loadMyTeam,0);}return v.innerHTML=myTeamView();}
   if(tab==="picks")return v.innerHTML=bestPicksView();
   if(tab==="compare")return v.innerHTML=compareView();
 }
@@ -319,7 +321,7 @@ function playersView(){
   h+='<div class="filters">'+["ALL","F","M","D","G"].map(p=>'<button onclick="posF=\''+p+'\';render()" class="'+(posF===p?"on":"")+'">'+(p==="ALL"?"All":POSNAME[p])+'</button>').join("")+'<button onclick="ownF=ownF===\'F\'?\'ALL\':\'F\';render()" class="'+(ownF==="F"?"on":"")+'">Free only</button></div>';
   h+='<div class="filters">'+[["val","Score"],["pred","Pred pts"],["price","Price"],["vpm","&pound; value"],["pp","PP/90"],["start","Start %"]].map(s=>'<button onclick="sortMode=\''+s[0]+'\';render()" class="'+(sortMode===s[0]?"on":"")+'">'+s[1]+'</button>').join("")+'</div>';
   h+='<div class="note">Score column: draft value &middot; points per 90. Prices and injury flags are live from the official feed. Sort by Score, Price, &pound; value (value per million), PP/90 or Start %. '+P.length+' players covered.</div>';
-  let rows=P.filter(x=>(posF==="ALL"||x.p===posF)&&(ownF==="ALL"||x.o==="F")&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
+  let rows=P.filter(x=>!x.ext&&(posF==="ALL"||x.p===posF)&&(ownF==="ALL"||x.o==="F")&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
   const sortKey={val:x=>x.v,pred:x=>predPts(x),price:x=>PRICE[x.n]||0,vpm:x=>PRICE[x.n]?x.v/PRICE[x.n]:0,pp:x=>x.pp,start:x=>startProb(x)}[sortMode];
   rows=rows.slice().sort((a,b)=>sortKey(b)-sortKey(a)||b.v-a.v);
   if(posF==="ALL"){rows.slice(0,260).forEach(x=>h+=rowHtml(x,true));}
@@ -346,7 +348,7 @@ let pickPos=null,pickQ="",whyOpen=false;
 function squadFlat(){return [].concat(SQUAD.G,SQUAD.D,SQUAD.M,SQUAD.F)}
 function squadSpent(){return squadFlat().reduce((s,n)=>s+(PRICE[n]||0),0)}
 function clubCount(t,except){let c=0;squadFlat().forEach(n=>{if(n===except)return;const x=P.find(y=>y.n===n);if(x&&x.t===t)c++;});return c;}
-function poolPlayers(){return P.filter(x=>PRICE[x.n]&&FPLID[x.n])}
+function poolPlayers(){return P.filter(x=>PRICE[x.n]&&FPLID[x.n]&&!x.ext)}
 function bestXIPred(names){
   const g0=META.gw||1;
   const ps=names.map(n=>P.find(y=>y.n===n)).filter(Boolean).map(x=>({x,e:predPtsAt(x,g0)}));
@@ -658,6 +660,141 @@ function playerView(){
   h+='<button onclick="CMP=[\''+esc(x.n)+'\'];findAlternatives();tab=\'compare\';FOCUS=null;render()" style="flex:1;background:var(--card2);border:1px solid var(--a);color:var(--a);border-radius:8px;padding:9px 0;font-size:12.5px;font-weight:700;">Compare with alternatives</button>';
   h+='</div>';
   return h;
+}
+// ---- My Team (phase 9) ----
+// A real FPL squad can contain players our curated database never rated. Rather than
+// hide them, synthesise a record from the feed (last season's points as the index
+// proxy) and flag it `ext` so it never pollutes the ranked lists or the optimiser.
+const IDNAME={};Object.keys(FPLID).forEach(n=>{IDNAME[FPLID[n]]=n});
+const POSOF={1:"G",2:"D",3:"M",4:"F"};
+function ensurePlayer(id){
+  if(IDNAME[id]){const ex=P.find(y=>y.n===IDNAME[id]);if(ex)return ex;}
+  const e=ELS[id];if(!e)return null;
+  const nm=(e.first_name?e.first_name+" ":"")+e.second_name;
+  let x=P.find(y=>y.n===nm);
+  if(!x){
+    const pts=e.total_points||0;
+    x={n:nm,t:TEAMSHORT[e.team]||"?",p:POSOF[e.element_type],pts:pts,pp:parseFloat(e.points_per_game)||0,
+       g:grade(POSOF[e.element_type],pts),v:Math.max(5,Math.round(pts/2.2)),o:"F",gw:null,r:"",ext:true};
+    P.push(x);
+    FPLID[nm]=id;
+    PRICE[nm]=e.now_cost/10;
+    LIVESTAT[nm]=e.status==="a"?0:e.status==="d"?1:2;
+    if(e.chance_of_playing_next_round!=null&&e.chance_of_playing_next_round<100)CHANCE[nm]=e.chance_of_playing_next_round;
+    LIVEEL[nm]={form:parseFloat(e.form)||0,ep:parseFloat(e.ep_next)||0};
+    OWN[nm]=parseFloat(e.selected_by_percent)||0;
+    XG[nm]={xg:parseFloat(e.expected_goals_per_90)||0,xa:parseFloat(e.expected_assists_per_90)||0,xgc:parseFloat(e.expected_goals_conceded_per_90)||0,mins:e.minutes||0,ppg:parseFloat(e.points_per_game)||0};
+    clearMeta();
+  }
+  return x;
+}
+let MT={id:localStorage.getItem("fplHQteam")||"",entry:null,picks:null,gw:null,state:"idle",err:""};
+async function loadMyTeam(){
+  const id=(MT.id||"").trim();
+  if(!/^\d{1,9}$/.test(id)){MT.state="error";MT.entry=null;MT.picks=null;MT.err="That is not a valid team id. It is the number in your team's web address on the official FPL site.";render();return;}
+  MT.state="loading";MT.err="";render();
+  try{
+    const er=await fetch(RELAY+"/entry?id="+id,{signal:AbortSignal.timeout(12000)});
+    if(er.status===404){MT.state="error";MT.entry=null;MT.picks=null;MT.err="No team found with id "+id+". Check the number and try again.";render();return;}
+    if(!er.ok)throw new Error("entry "+er.status);
+    MT.entry=await er.json();
+    localStorage.setItem("fplHQteam",id);
+    MT.picks=null;MT.gw=null;
+    for(let g=(META.gw||1);g>=1&&g>=(META.gw||1)-1;g--){
+      const pr=await fetch(RELAY+"/picks?id="+id+"&gw="+g,{signal:AbortSignal.timeout(12000)});
+      if(pr.ok){MT.picks=await pr.json();MT.gw=g;break;}
+    }
+    MT.state="ready";
+  }catch(e){MT.state="error";MT.err="Could not reach the official feed. Try again in a moment.";}
+  render();
+}
+function myTeamView(){
+  let h='<div class="note"><b>Link your real FPL team.</b> Enter your team id and the app pulls your actual squad, then runs the same analysis on it: recommended eleven, captain check, warnings and transfer targets. Your id is the number in your team\'s address on the official site, for example fantasy.premierleague.com/entry/<b>1234567</b>/event/1.</div>';
+  h+='<div class="card"><div class="lbl">Team id</div><div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  h+='<input type="text" id="tid" value="'+(MT.id||"")+'" placeholder="e.g. 1234567" style="flex:1;min-width:150px;margin:0;" oninput="MT.id=this.value">';
+  h+='<button class="btn" onclick="MT.id=document.getElementById(\'tid\').value;loadMyTeam()">'+(MT.state==="loading"?"Loading&hellip;":"Load my team")+'</button>';
+  if(MT.entry)h+='<button class="btn ghost" onclick="MT={id:\'\',entry:null,picks:null,gw:null,state:\'idle\',err:\'\'};localStorage.removeItem(\'fplHQteam\');render()">Forget</button>';
+  h+='</div>';
+  if(MT.err)h+='<div style="font-size:12.5px;color:var(--danger);margin-top:8px;">'+MT.err+'</div>';
+  h+='</div>';
+  if(!MT.entry)return h;
+  const e=MT.entry;
+  h+='<div class="card"><div class="lbl">Your team</div><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">';
+  h+='<div><div style="font-size:17px;font-weight:800;">'+e.name+'</div><div style="font-size:12px;color:var(--sub);">'+((e.player_first_name||"")+" "+(e.player_last_name||"")).trim()+'</div></div>';
+  h+='<div style="text-align:right;"><div style="font-size:17px;font-weight:800;">'+(e.summary_overall_points!=null?e.summary_overall_points+" pts":"&mdash;")+'</div><div style="font-size:12px;color:var(--sub);">'+(e.summary_overall_rank!=null?"rank "+e.summary_overall_rank.toLocaleString("en-GB"):"no rank yet")+'</div></div>';
+  h+='</div></div>';
+  if(!MT.picks){
+    h+='<div class="card"><div class="lbl">Squad not available yet</div><div style="font-size:13px;line-height:1.6;">The official game does not publish anyone\'s picks until the first deadline passes ('+(DEADLINE||"Fri 21 Aug")+'). Your team is linked and saved, so come back after the deadline and your squad will load automatically.</div>';
+    h+='<div style="margin-top:10px;"><button class="btn ghost" onclick="tab=\'builder\';render()">Plan a squad in the builder meanwhile &rarr;</button></div></div>';
+    return h;
+  }
+  // Squad analysis
+  const picks=MT.picks.picks.map(pk=>({pk,x:ensurePlayer(pk.element)})).filter(r=>r.x);
+  const missing=MT.picks.picks.length-picks.length;
+  const withPred=picks.map(r=>({...r,e:predPts(r.x)}));
+  const theirXI=withPred.filter(r=>r.pk.position<=11).sort((a,b)=>a.pk.position-b.pk.position);
+  const theirBench=withPred.filter(r=>r.pk.position>11).sort((a,b)=>a.pk.position-b.pk.position);
+  const capt=withPred.find(r=>r.pk.is_captain);
+  const metas=picks.map(r=>metaOf(r.x.n));
+  const sqMeta=metas.length?Math.round(metas.reduce((a,b)=>a+b,0)/metas.length):0;
+  const bestCapt=withPred.slice().sort((a,b)=>b.e-a.e)[0];
+  h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div class="lbl" style="margin:0;">Squad Meta &middot; gameweek '+MT.gw+'</div><div style="font-size:11.5px;color:var(--sub);">'+picks.length+' players'+(missing?" ("+missing+" could not be matched)":"")+'</div></div><div style="font-size:26px;font-weight:800;color:var(--a);">'+sqMeta+'<span style="font-size:12px;color:var(--sub);">/100</span></div></div></div>';
+  // Captain check
+  if(capt&&bestCapt){
+    const same=capt.x.n===bestCapt.x.n;
+    h+='<div class="card"><div class="lbl">&#128081; Captain check</div>';
+    h+='<div style="font-size:13px;line-height:1.7;">You have captained <b>'+capt.x.n+'</b> ('+capt.e.toFixed(1)+' predicted).<br>';
+    h+=same?'The model agrees; he is the highest predicted scorer in your squad.':'The model prefers <b>'+bestCapt.x.n+'</b> ('+bestCapt.e.toFixed(1)+' predicted, '+confidenceOf(bestCapt.x).pct+'% confidence), a gain of '+(bestCapt.e-capt.e).toFixed(1)+' points.';
+    h+='</div></div>';
+  }
+  // Their XI vs ours
+  const ourXI=(function(){
+    const gk=withPred.filter(r=>r.x.p==="G").sort((a,b)=>b.e-a.e);
+    const out=withPred.filter(r=>r.x.p!=="G").sort((a,b)=>b.e-a.e);
+    let xi=gk.length?[gk[0]]:[],d=0,m=0,f=0;
+    out.forEach(r=>{if(xi.length>=11)return;
+      const left=11-xi.length,needD=Math.max(0,3-d),needM=Math.max(0,3-m),needF=Math.max(0,1-f);
+      const need=(r.x.p==="D"&&needD>0)||(r.x.p==="M"&&needM>0)||(r.x.p==="F"&&needF>0);
+      const capOk=(r.x.p==="D"&&d<5)||(r.x.p==="M"&&m<5)||(r.x.p==="F"&&f<3);
+      if((need||left>needD+needM+needF)&&capOk){xi.push(r);if(r.x.p==="D")d++;if(r.x.p==="M")m++;if(r.x.p==="F")f++;}
+    });
+    return xi;
+  })();
+  const ourNames=new Set(ourXI.map(r=>r.x.n)),theirNames=new Set(theirXI.map(r=>r.x.n));
+  const benchUp=ourXI.filter(r=>!theirNames.has(r.x.n)),startDown=theirXI.filter(r=>!ourNames.has(r.x.n));
+  h+='<div class="card"><div class="lbl">Your eleven vs the model</div>';
+  if(!benchUp.length)h+='<div style="font-size:12.5px;color:var(--sub);">Your starting eleven matches the model. Nothing to change.</div>';
+  else{
+    h+='<div style="font-size:12.5px;color:var(--sub);margin-bottom:6px;">'+benchUp.length+' change'+(benchUp.length>1?"s":"")+' worth '+(benchUp.reduce((s,r)=>s+r.e,0)-startDown.reduce((s,r)=>s+r.e,0)).toFixed(1)+' predicted points:</div>';
+    benchUp.forEach((r,i)=>{const outp=startDown[i];
+      h+='<div class="row"><span class="pn">'+(outp?outp.x.n+' &rarr; <b>'+r.x.n+'</b>':'Start <b>'+r.x.n+'</b>')+'</span><span class="val" style="color:var(--a);">+'+(outp?(r.e-outp.e).toFixed(1):r.e.toFixed(1))+'</span></div>';});
+  }
+  h+='</div>';
+  // Full squad
+  h+='<div class="card"><div class="lbl">Starting eleven</div>';
+  theirXI.forEach(r=>{h+=mtRow(r,r.pk.is_captain?"C":r.pk.is_vice_captain?"V":"")});
+  h+='</div><div class="card"><div class="lbl">Bench</div>';
+  theirBench.forEach(r=>{h+=mtRow(r,"")});
+  h+='</div>';
+  // Warnings
+  const warn=picks.map(r=>({r,c:confidenceOf(r.x)})).filter(o=>o.c.pct<60||statusOf(o.r.x.n)>0).sort((a,b)=>a.c.pct-b.c.pct);
+  h+='<div class="card"><div class="lbl">&#9888; Warnings in your squad</div>';
+  if(!warn.length)h+='<div style="font-size:12.5px;color:var(--sub);">Nothing flagged. Every player is expected to start.</div>';
+  warn.slice(0,6).forEach(o=>{h+='<div class="row"><span class="tc" style="background:'+(TEAMCOL[o.r.x.t]||"#888")+'1f;color:'+(TEAMCOL[o.r.x.t]||"#888")+';">'+o.r.x.t+'</span><span class="pn">'+o.r.x.n+'<small>'+(o.c.risk[0]||o.c.band.toLowerCase()+" confidence")+'</small></span><span class="conf" style="background:'+o.c.col+'1f;color:'+o.c.col+';">'+o.c.pct+'%</span></div>';});
+  h+='</div>';
+  // Transfer targets
+  const owned=new Set(picks.map(r=>r.x.n));
+  const weakest=picks.slice().sort((a,b)=>metaOf(a.x.n)-metaOf(b.x.n))[0];
+  const targets=poolPlayers().filter(x=>!owned.has(x.n)).sort((a,b)=>metaOf(b.n)-metaOf(a.n)).slice(0,5);
+  h+='<div class="card"><div class="lbl">&#128260; Transfer targets</div>';
+  targets.forEach(x=>{h+='<div class="row" style="cursor:pointer;" onclick="CMP=[\''+esc(x.n)+'\',\''+esc(weakest.x.n)+'\'];tab=\'compare\';render()"><span class="tc" style="background:'+(TEAMCOL[x.t]||"#888")+'1f;color:'+(TEAMCOL[x.t]||"#888")+';">'+x.t+'</span><span class="pn">'+x.n+'<small>&pound;'+(PRICE[x.n]||0).toFixed(1)+'m</small></span><span class="val" style="color:var(--a);font-weight:800;">'+metaOf(x.n)+'</span></div>';});
+  if(weakest)h+='<div style="font-size:12px;color:var(--sub);margin-top:6px;">Your lowest-rated player is <b>'+weakest.x.n+'</b> (Meta '+metaOf(weakest.x.n)+'). Tap a target to compare them.</div>';
+  h+='</div>';
+  return h;
+}
+function mtRow(r,badge){
+  const c=confidenceOf(r.x);
+  return '<div class="row" style="cursor:pointer;" onclick="openPlayer(\''+esc(r.x.n)+'\')"><span class="tc" style="background:'+(TEAMCOL[r.x.t]||"#888")+'1f;color:'+(TEAMCOL[r.x.t]||"#888")+';">'+r.x.t+'</span><span class="pn">'+r.x.n+(badge?' <span class="conf" style="background:var(--accent)1f;color:var(--accent);">'+badge+'</span>':'')+'<small>'+POSNAME[r.x.p]+' &middot; &pound;'+(PRICE[r.x.n]||0).toFixed(1)+'m'+(r.x.ext?' &middot; not in our rated list':'')+'</small></span><span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span><span class="val">'+r.e.toFixed(1)+'</span></div>';
 }
 // ---- Dashboard (phase 8) ----
 function initials(n){const p=n.split(" ");return (p[0][0]+(p.length>1?p[p.length-1][0]:"")).toUpperCase();}

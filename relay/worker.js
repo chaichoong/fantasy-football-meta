@@ -19,7 +19,7 @@ const jsonResp = (obj, status = 200) =>
     headers: { "Content-Type": "application/json", ...CORS },
   });
 
-async function proxy(target, ctx) {
+async function proxy(target, ctx, ttl) {
   const cache = caches.default;
   const cacheKey = new Request(target);
   let resp = await cache.match(cacheKey);
@@ -27,9 +27,14 @@ async function proxy(target, ctx) {
     const upstream = await fetch(target, {
       headers: { "User-Agent": "fpl-season-hq-relay/1.0" },
     });
-    if (!upstream.ok) return jsonResp({ error: "upstream " + upstream.status }, 502);
+    if (!upstream.ok) {
+      // Preserve 404 so callers can tell "this does not exist yet" (picks before the
+      // season starts, unknown team id) from "the relay is broken".
+      if (upstream.status === 404) return jsonResp({ error: "not found upstream", upstream: 404 }, 404);
+      return jsonResp({ error: "upstream " + upstream.status }, 502);
+    }
     resp = new Response(upstream.body, upstream);
-    resp.headers.set("Cache-Control", "public, max-age=" + CACHE_SECS);
+    resp.headers.set("Cache-Control", "public, max-age=" + (ttl || CACHE_SECS));
     resp.headers.set("Access-Control-Allow-Origin", "*");
     resp.headers.delete("Set-Cookie");
     ctx.waitUntil(cache.put(cacheKey, resp.clone()));
@@ -105,6 +110,19 @@ export default {
       if (!ev || !/^\d{1,2}$/.test(ev)) return jsonResp({ error: "event required" }, 400);
       return proxy(UPSTREAM + "/event/" + ev + "/live/", ctx);
     }
+    // My Team: public read-only endpoints only. Ids are validated as numbers so this
+    // can never be pointed at an authenticated path.
+    if (p === "/entry") {
+      const id = url.searchParams.get("id");
+      if (!id || !/^\d{1,9}$/.test(id)) return jsonResp({ error: "numeric id required" }, 400);
+      return proxy(UPSTREAM + "/entry/" + id + "/", ctx, 300);
+    }
+    if (p === "/picks") {
+      const id = url.searchParams.get("id"), gw = url.searchParams.get("gw");
+      if (!id || !/^\d{1,9}$/.test(id)) return jsonResp({ error: "numeric id required" }, 400);
+      if (!gw || !/^\d{1,2}$/.test(gw) || +gw < 1 || +gw > 38) return jsonResp({ error: "gw 1-38 required" }, 400);
+      return proxy(UPSTREAM + "/entry/" + id + "/event/" + gw + "/picks/", ctx, 60);
+    }
     if (p === "/snapshots") {
       const list = await env.PREDICTIONS.list({ prefix: "pred:gw" });
       const snapshots = list.keys
@@ -127,7 +145,7 @@ export default {
         return jsonResp({ error: String(e.message || e) }, 502);
       }
     }
-    return jsonResp({ error: "not found", routes: ["/bootstrap", "/fixtures", "/live", "/snapshots", "/snapshot", "/snap"] }, 404);
+    return jsonResp({ error: "not found", routes: ["/bootstrap", "/fixtures", "/live", "/entry", "/picks", "/snapshots", "/snapshot", "/snap"] }, 404);
   },
 
   async scheduled(event, env, ctx) {
