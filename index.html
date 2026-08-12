@@ -157,17 +157,20 @@ async function loadLive(){
     META.date=next.is_current?"in play":"deadline "+DEADLINE;
     META.updated="live feed, "+new Date().toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
     if(gwSel<META.gw||gwSel>META.gw+3)gwSel=META.gw;
-    LIVEOK=true;saveInj();
-  }catch(e){LIVEOK=false;}
+    LIVEOK=true;liveTries=0;saveInj();
+  }catch(e){
+    LIVEOK=false;
+    if(++liveTries<=3)setTimeout(loadLive,liveTries*2500); // self-heal: retry at 2.5s, 5s, 7.5s
+  }
   render();
 }
 function statusOf(n){return INJ[n]!==undefined?INJ[n]:(LIVESTAT[n]!==undefined?LIVESTAT[n]:0)}
 function updateStrip(){
   const el=document.getElementById("liveStrip");if(!el)return;
   if(LIVEOK)el.innerHTML='<span style="color:var(--a);font-weight:600;">&#9679; Live</span> &middot; GW'+META.gw+' &middot; '+META.date+' &middot; updated '+META.updated.replace("live feed, ","");
-  else el.innerHTML='<span style="color:var(--warn);font-weight:600;">&#9675; Stored data</span> &middot; GW'+META.gw+' &middot; reopen or refresh to go live';
+  else el.innerHTML='<span style="color:var(--warn);font-weight:600;">&#9675; '+(liveTries>0&&liveTries<=3?'Connecting&hellip;':'Stored data')+'</span> &middot; GW'+META.gw+(liveTries>3?' &middot; refresh to retry':'');
 }
-let lastLoad=0;
+let lastLoad=0,liveTries=0;
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&Date.now()-lastLoad>300000)loadLive();});
 function applyPack(txt){
   try{
