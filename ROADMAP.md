@@ -1,4 +1,4 @@
-# FPL Season HQ — Roadmap
+# Fantasy Football Meta — Roadmap
 
 Based on research and planning done by Leo/James (Aug 2026) plus a feasibility review.
 Decision made 12 Aug 2026: the app serves **both games, draft league first** — the draft
@@ -171,9 +171,13 @@ result; nothing in the accuracy record depends on Meta, so no history was invali
 Asked to build accounts + a Pro tier; stopped and escalated instead. Three things must be
 settled first, and two are commercial calls only Kevin can make:
 
-1. **Trademark.** The product is literally named "FPL Season HQ" and "FPL" is the Premier
-   League's mark. Free family tool = low risk. Charging money under their mark = real
-   exposure. Needs a rename before any paid launch.
+1. ~~**Trademark.**~~ RESOLVED 12 Aug 2026. Renamed to **Fantasy Football Meta**. "Fantasy
+   football" is the generic category term (used commercially by Scout, Hub and Fix), and
+   "Meta" sits as the trailing distinctive word rather than the leading brand element, so
+   neither the Premier League's "FPL" mark nor Meta Platforms' leading-brand claim applies
+   as it would have to "Meta FPL". Domain: fantasyfootballmeta.co.uk.
+   STILL REQUIRED before charging: a proper trademark search. A free domain is not a
+   cleared mark.
 2. **Data licence.** Every number comes from the PL's free feed with no commercial
    licence. Selling access to it is materially different from personal use. Needs a
    proper check, and a plan B source.

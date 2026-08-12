@@ -1,9 +1,9 @@
-/* FPL Season HQ — phase 8 visual identity.
-   Deliberately NOT the Premier League palette or branding: violet/indigo of our own,
-   so the product can be sold under its own name. Light content area, dark sidebar. */
+/* Fantasy Football Meta — brand identity.
+   Own name, own palette (deep indigo, mint-to-violet gradient), no borrowed marks.
+   Light content area on a dark brand sidebar. */
 :root{
-  --brand-1:#241246;--brand-2:#3A1D6E;--brand-ink:#EDE9F7;--brand-dim:#A79CC6;
-  --accent:#7C4DFF;--accent-soft:#EFE9FF;
+  --brand-1:#0D0A1F;--brand-2:#231843;--brand-ink:#F2EFFA;--brand-dim:#9C93BE;
+  --accent:#7C4DFF;--accent-soft:#EFE9FF;--mint:#3DDC97;
   --bg:#F4F5FA;--card:#FFFFFF;--card2:#F1F2F9;--line:#E5E6F0;
   --txt:#1A1533;--sub:#6B6885;
   --a:#00A870;--b:#3D6BE5;--c:#8B88A0;--warn:#B87400;--danger:#D94A4A;
@@ -17,8 +17,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 /* ---------- Shell ---------- */
 .shell{display:flex;min-height:100vh;}
 .side{width:206px;flex-shrink:0;background:linear-gradient(180deg,var(--brand-1),var(--brand-2));color:var(--brand-ink);padding:16px 12px;position:sticky;top:0;height:100vh;overflow-y:auto;}
-.brand{font-size:17px;font-weight:800;letter-spacing:-.3px;line-height:1.15;margin-bottom:2px;}
-.brand span{color:#B79BFF;}
+.brandbox{display:flex;align-items:center;gap:9px;margin-bottom:3px;}
+.mark{width:30px;height:30px;flex-shrink:0;}
+.brand{font-size:13px;font-weight:800;letter-spacing:.06em;line-height:1.15;}
+.brand span{color:var(--mint);font-size:17px;letter-spacing:.09em;}
 .brand-sub{font-size:11px;color:var(--brand-dim);margin-bottom:16px;}
 .main{flex:1;min-width:0;padding:16px 18px 40px;max-width:1180px;}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
@@ -32,7 +34,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .tabs{display:flex;flex-direction:column;gap:2px;}
 .tabs button{width:100%;text-align:left;background:transparent;border:0;color:var(--brand-dim);border-radius:9px;padding:9px 11px;font-size:13px;font-weight:600;cursor:pointer;}
 .tabs button:hover{background:rgba(255,255,255,.07);color:var(--brand-ink);}
-.tabs button.on{background:var(--accent);color:#fff;}
+.tabs button.on{background:linear-gradient(90deg,rgba(61,220,151,.22),var(--accent));color:#fff;}
 .pro{margin-top:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:11px;}
 .pro b{font-size:12.5px;display:block;margin-bottom:3px;}
 .pro p{font-size:11px;color:var(--brand-dim);line-height:1.5;}

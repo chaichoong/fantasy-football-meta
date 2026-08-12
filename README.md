@@ -1,6 +1,8 @@
-# FPL Season HQ · 2026/27
+# Fantasy Football Meta
 
-A single-page Fantasy Premier League planner for a 3-manager draft league (Kevin v Leo v James).
+**Make smarter moves.**
+
+A fantasy football decision engine: predicted points, Meta ratings, transfer calls and a public accuracy record. Also carries the private 3-manager draft league it grew out of.
 
 - **Squads** — the three drafted teams with value scores and grades
 - **Players** — ~319 scored players, filterable, with a "free agents only" toggle
@@ -14,4 +16,4 @@ chance-of-playing and fixture difficulty stream live from the official FPL feed 
 Cloudflare Worker relay (`relay/worker.js`, deployed with `npx wrangler deploy`). Picks and
 injury-override taps save to the browser on whichever device you open it on.
 
-**Live:** https://chaichoong.github.io/fpl-season-hq/
+**Live:** https://fantasyfootballmeta.co.uk (pending DNS) · https://chaichoong.github.io/fantasy-football-meta/
