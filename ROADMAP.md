@@ -199,6 +199,29 @@ no paid tier, nothing to buy.
   give most of the visual payoff at zero risk.
 - **Betting odds** — not doing gambling odds in any form. Probabilities only.
 
+## Architecture (settled 12 Aug 2026)
+
+Decided by what the product actually needs, not by matching OD for its own sake.
+
+| Layer | Choice | Why |
+|---|---|---|
+| Hosting | **Cloudflare Pages** (`fantasy-football-meta`) | Static site. Same host as OD's `od-affiliates` and `content-machine-app`, so one vendor and one dashboard. |
+| Data/API | **Cloudflare Worker** `fpl-relay` | Already live. Adds CORS to the official feed, caches it, records prices. |
+| Storage | **Cloudflare KV** `PREDICTIONS` | Prediction snapshots + the daily price history. |
+| Source | **GitHub** `chaichoong/fantasy-football-meta` | Source of truth; also still serves GitHub Pages as a fallback host. |
+| Domain | **Namecheap** → Cloudflare DNS | fantasyfootballmeta.co.uk. |
+
+**Explicitly NOT used, and why:**
+- **Vercel** — nothing to server-render. Cloudflare Pages already hosts static sites here, and the Worker + KV are on Cloudflare, so adding Vercel means two vendors for one small app.
+- **Hostinger** — no need for shared hosting at all.
+- **Supabase** — there is no user data, no accounts and no relational data. Everything a user has lives on their own device by design. Revisit ONLY if accounts are built, and even then Workers + D1/KV may be enough.
+
+**Deploy note:** the Pages project was created by API and deploys via `wrangler pages deploy`.
+To make it auto-deploy on push, connect the repo in the Cloudflare dashboard (OAuth).
+Do NOT put the existing Cloudflare token into GitHub Actions secrets — it is broad-scoped
+(DNS + Workers + Pages across every zone including operationsdirector.co.uk) and this repo
+is public. If CI deploys are wanted, create a Pages-only scoped token first.
+
 ## Business pivot (12 Aug 2026)
 
 Kevin's call: this is now being built toward a sellable subscription product, not just the
