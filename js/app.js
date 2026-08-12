@@ -46,7 +46,7 @@ async function loadLive(){
     META.date=next.is_current?"in play":"deadline "+DEADLINE;
     META.updated="live feed, "+new Date().toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
     if(gwSel<META.gw||gwSel>META.gw+3)gwSel=META.gw;
-    LIVEOK=true;liveTries=0;saveInj();
+    LIVEOK=true;liveTries=0;clearMeta();saveInj();
   }catch(e){
     LIVEOK=false;
     if(++liveTries<=3)setTimeout(loadLive,liveTries*2500); // self-heal: retry at 2.5s, 5s, 7.5s
@@ -74,6 +74,32 @@ function predParts(x){
   return {sig,wsum,base,avail,fx,mom,pred:base*fx*avail*mom};
 }
 function predPts(x){return predParts(x).pred}
+// ---- Meta Rating (phase 5, Leo's spec) ----
+// Player Meta /100: form 20, predicted points 25, fixtures (next 5 GWs) 20,
+// expected minutes 15, value 10, long-term 10. A component with no data yet
+// (form preseason, value with no price) drops out and the weights renormalise,
+// exactly like the prediction blend. metaParts() exposes every line for "Why?".
+function metaParts(x){
+  const L=LIVEEL[x.n]||{};
+  const g0=META.gw||1;
+  let fxa=0,fxn=0;for(let g=g0;g<Math.min(39,g0+5);g++){fxa+=fxMult(x.t,g);fxn++;}
+  const fixScore=Math.max(0,Math.min(100,((fxa/fxn)-0.6)/0.75*100));
+  const parts=[
+    ["Form",20,L.form>0?Math.min(100,L.form/8*100):null],
+    ["Predicted points",25,Math.min(100,predPtsAt(x,g0)/7*100)],
+    ["Fixtures (next 5)",20,fixScore],
+    ["Minutes",15,startProb(x)],
+    ["Value",10,PRICE[x.n]?Math.min(100,(x.pts/38)/PRICE[x.n]/0.8*100):null],
+    ["Long-term",10,x.v]
+  ];
+  const live=parts.filter(c=>c[2]!==null);
+  const wsum=live.reduce((s,c)=>s+c[1],0);
+  const total=Math.round(live.reduce((s,c)=>s+c[1]*c[2],0)/wsum);
+  return {parts,wsum,total};
+}
+let MCACHE={};
+function metaOf(n){if(MCACHE[n]===undefined){const x=P.find(y=>y.n===n);MCACHE[n]=x?metaParts(x).total:0;}return MCACHE[n];}
+function clearMeta(){MCACHE={};}
 // ---- Accuracy (phase 4) ----
 // Snapshots are the model's inputs archived by the relay in the final 2h before
 // each deadline, immutable afterwards. Predictions here are recomputed from the
@@ -174,6 +200,7 @@ function render(){
   if(tab==="fixtures")return v.innerHTML=fixturesView();
   if(tab==="planner")return v.innerHTML=plannerView();
   if(tab==="accuracy")return v.innerHTML=accuracyView();
+  if(tab==="builder")return v.innerHTML=builderView();
 }
 function squadTotal(o){return P.filter(x=>x.o===o).reduce((s,x)=>s+x.v,0)}
 function squadsView(){
@@ -199,8 +226,7 @@ function playersView(){
   h+='<div class="filters">'+[["val","Score"],["pred","Pred pts"],["price","Price"],["vpm","&pound; value"],["pp","PP/90"],["start","Start %"]].map(s=>'<button onclick="sortMode=\''+s[0]+'\';render()" class="'+(sortMode===s[0]?"on":"")+'">'+s[1]+'</button>').join("")+'</div>';
   h+='<div class="note">Score column: draft value &middot; points per 90. Prices and injury flags are live from the official feed. Sort by Score, Price, &pound; value (value per million), PP/90 or Start %. '+P.length+' players covered.</div>';
   let rows=P.filter(x=>(posF==="ALL"||x.p===posF)&&(ownF==="ALL"||x.o==="F")&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
-  const startP=x=>{const s=statusOf(x.n);return s===2?0:(CHANCE[x.n]!=null?CHANCE[x.n]:(s===1?50:100));};
-  const sortKey={val:x=>x.v,pred:x=>predPts(x),price:x=>PRICE[x.n]||0,vpm:x=>PRICE[x.n]?x.v/PRICE[x.n]:0,pp:x=>x.pp,start:x=>startP(x)}[sortMode];
+  const sortKey={val:x=>x.v,pred:x=>predPts(x),price:x=>PRICE[x.n]||0,vpm:x=>PRICE[x.n]?x.v/PRICE[x.n]:0,pp:x=>x.pp,start:x=>startProb(x)}[sortMode];
   rows=rows.slice().sort((a,b)=>sortKey(b)-sortKey(a)||b.v-a.v);
   if(posF==="ALL"){rows.slice(0,260).forEach(x=>h+=rowHtml(x,true));}
   else{rows.forEach(x=>h+=rowHtml(x,true));}
@@ -217,6 +243,138 @@ function fixturesView(){
   return h;
 }
 let planTeam="K",gwSel=META.gw||1,expanded=null;
+// ---- Squad Builder (phase 5) ----
+const CAPS={G:2,D:5,M:5,F:3};
+let SQUAD={G:[],D:[],M:[],F:[]};
+try{const s=JSON.parse(localStorage.getItem("fplHQsquad")||"null");if(s&&s.G)SQUAD=s;}catch(e){}
+function saveSquad(){try{localStorage.setItem("fplHQsquad",JSON.stringify(SQUAD))}catch(e){}}
+let pickPos=null,pickQ="",whyOpen=false;
+function squadFlat(){return [].concat(SQUAD.G,SQUAD.D,SQUAD.M,SQUAD.F)}
+function squadSpent(){return squadFlat().reduce((s,n)=>s+(PRICE[n]||0),0)}
+function clubCount(t,except){let c=0;squadFlat().forEach(n=>{if(n===except)return;const x=P.find(y=>y.n===n);if(x&&x.t===t)c++;});return c;}
+function poolPlayers(){return P.filter(x=>PRICE[x.n]&&FPLID[x.n])}
+function bestXIPred(names){
+  const g0=META.gw||1;
+  const ps=names.map(n=>P.find(y=>y.n===n)).filter(Boolean).map(x=>({x,e:predPtsAt(x,g0)}));
+  const gk=ps.filter(r=>r.x.p==="G").sort((a,b)=>b.e-a.e);
+  const out=ps.filter(r=>r.x.p!=="G").sort((a,b)=>b.e-a.e);
+  let xi=gk.length?[gk[0]]:[],d=0,m=0,f=0;
+  out.forEach(r=>{if(xi.length>=11)return;
+    const left=11-xi.length,needD=Math.max(0,3-d),needM=Math.max(0,3-m),needF=Math.max(0,1-f);
+    const need=(r.x.p==="D"&&needD>0)||(r.x.p==="M"&&needM>0)||(r.x.p==="F"&&needF>0);
+    const capOk=(r.x.p==="D"&&d<5)||(r.x.p==="M"&&m<5)||(r.x.p==="F"&&f<3);
+    if((need||left>needD+needM+needF)&&capOk){xi.push(r);if(r.x.p==="D")d++;if(r.x.p==="M")m++;if(r.x.p==="F")f++;}
+  });
+  return xi.reduce((s,r)=>s+r.e,0);
+}
+// Greedy start + best-single-swap local search. Never brute force: ~15x300 swap
+// checks per round, stops when no swap improves total Meta.
+function optimiseSquad(){
+  clearMeta();
+  const pool=poolPlayers();
+  const sq={G:[],D:[],M:[],F:[]};
+  const inSq=n=>sq.G.includes(n)||sq.D.includes(n)||sq.M.includes(n)||sq.F.includes(n);
+  const clubs=t=>[].concat(sq.G,sq.D,sq.M,sq.F).filter(n=>{const x=P.find(y=>y.n===n);return x&&x.t===t;}).length;
+  ["G","D","M","F"].forEach(p=>{
+    pool.filter(x=>x.p===p).sort((a,b)=>PRICE[a.n]-PRICE[b.n]).forEach(x=>{
+      if(sq[p].length>=CAPS[p]||clubs(x.t)>=3||inSq(x.n))return;sq[p].push(x.n);});
+  });
+  for(let it=0;it<300;it++){
+    const spent=[].concat(sq.G,sq.D,sq.M,sq.F).reduce((s,n)=>s+PRICE[n],0);
+    let best=null;
+    ["G","D","M","F"].forEach(p=>{
+      sq[p].forEach(out=>{
+        const outX=P.find(y=>y.n===out);
+        pool.filter(x=>x.p===p&&!inSq(x.n)).forEach(inn=>{
+          if(spent-PRICE[out]+PRICE[inn.n]>100.001)return;
+          const cc=clubs(inn.t)-(outX.t===inn.t?1:0);
+          if(cc>=3)return;
+          const gain=metaOf(inn.n)-metaOf(out);
+          if(gain>(best?best.gain:0.01))best={p,out,inn:inn.n,gain};
+        });
+      });
+    });
+    if(!best)break;
+    sq[best.p]=sq[best.p].map(n=>n===best.out?best.inn:n);
+  }
+  SQUAD=sq;saveSquad();
+}
+function suggestSwaps(){
+  const spent=squadSpent();const out=[];
+  ["G","D","M","F"].forEach(p=>{
+    SQUAD[p].forEach(o=>{
+      const oX=P.find(y=>y.n===o);
+      poolPlayers().filter(x=>x.p===p&&!squadFlat().includes(x.n)).forEach(inn=>{
+        if(spent-PRICE[o]+PRICE[inn.n]>100.001)return;
+        if(clubCount(inn.t,o)>=3)return;
+        const gain=metaOf(inn.n)-metaOf(o);
+        if(gain>0.5)out.push({o,i:inn.n,gain});
+      });
+    });
+  });
+  return out.sort((a,b)=>b.gain-a.gain).slice(0,3);
+}
+function addPick(n){const x=P.find(y=>y.n===n);if(!x)return;if(SQUAD[x.p].length>=CAPS[x.p])return;SQUAD[x.p].push(n);pickPos=null;pickQ="";saveSquad();render();}
+function dropPick(n){["G","D","M","F"].forEach(p=>{SQUAD[p]=SQUAD[p].filter(y=>y!==n)});saveSquad();render();}
+function builderView(){
+  if(!LIVEOK)return '<div class="card"><div class="lbl">Needs live data</div><div style="font-size:13px;">The builder uses live prices, so it waits for the feed. '+ (liveTries>3?'Tap a tab to retry.':'Connecting&hellip;')+'</div></div>';
+  let h='<div class="note"><b>Official-game squad builder.</b> &pound;100m, 2 GK &middot; 5 DEF &middot; 5 MID &middot; 3 FWD, max 3 per club. Every player carries a Meta rating out of 100 (form, predicted points, next-5 fixtures, minutes, value, long-term). Tap a slot to fill it, tap a player to remove him, or let the optimiser build the squad.</div>';
+  const spent=squadSpent(),left=100-spent,count=squadFlat().length;
+  const metas=squadFlat().map(metaOf);
+  const sqMeta=metas.length?Math.round(metas.reduce((a,b)=>a+b,0)/metas.length):0;
+  h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;">';
+  h+='<div><div style="font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;">Budget</div><div style="font-size:16px;font-weight:700;color:'+(left<0?'#e08a76':'var(--txt)')+'">&pound;'+left.toFixed(1)+'m left</div><div style="font-size:11px;color:var(--sub);">'+count+'/15 &middot; &pound;'+spent.toFixed(1)+'m spent</div></div>';
+  h+='<div style="text-align:right;"><div style="font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;">Squad Meta</div><div style="font-size:22px;font-weight:700;color:var(--a);">'+(count?sqMeta:0)+'<span style="font-size:12px;color:var(--sub);">/100</span></div>'+(count===15?'<div style="font-size:11px;color:var(--sub);">predicted GW pts: '+bestXIPred(squadFlat()).toFixed(1)+'</div>':'<div style="font-size:11px;color:var(--sub);">'+(15-count)+' slots empty</div>')+'</div></div>';
+  h+='<div style="display:flex;gap:6px;margin-top:9px;">';
+  h+='<button onclick="optimiseSquad();render()" style="flex:1;background:var(--accentbtn,#2c4a3e);border:1px solid var(--a);color:var(--a);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:700;">&#10024; Optimise squad</button>';
+  h+='<button onclick="whyOpen=!whyOpen;render()" style="flex:1;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;">Why '+(count?sqMeta:0)+'?</button>';
+  h+='<button onclick="SQUAD={G:[],D:[],M:[],F:[]};saveSquad();render()" style="background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 10px;font-size:12.5px;">Reset</button></div>';
+  if(whyOpen&&count){
+    const agg={};
+    squadFlat().forEach(n=>{const x=P.find(y=>y.n===n);metaParts(x).parts.forEach(c=>{if(c[2]===null)return;(agg[c[0]]=agg[c[0]]||{w:c[1],s:0,n:0});agg[c[0]].s+=c[2];agg[c[0]].n++;});});
+    h+='<div style="font-size:11.5px;color:var(--sub);margin-top:8px;line-height:1.8;">';
+    Object.keys(agg).forEach(k=>{const a=agg[k];h+='<div style="display:flex;justify-content:space-between;"><span>'+k+' (weight '+a.w+')</span><span>'+Math.round(a.s/a.n)+'/100</span></div>';});
+    h+='<div style="margin-top:4px;">Squad Meta is the average of every player\'s Meta; each player\'s Meta is his weighted component score. Missing components (form before matches, for example) drop out and the weights renormalise.</div></div>';
+  }
+  h+='</div>';
+  if(pickPos)return h+pickerHtml();
+  const rows=[["F","Forwards"],["M","Midfielders"],["D","Defenders"],["G","Goalkeepers"]];
+  h+='<div class="pitch">';
+  rows.forEach(([p,label])=>{
+    h+='<div class="prow-l">'+label+'</div><div class="prow">';
+    for(let i=0;i<CAPS[p];i++){
+      const n=SQUAD[p][i];
+      if(n){const x=P.find(y=>y.n===n);const short=n.split(" ").slice(-1)[0];
+        h+='<div class="slot filled" onclick="dropPick(\''+esc(n)+'\')"><div class="sn">'+short+'</div><div class="sm">&pound;'+(PRICE[n]||0).toFixed(1)+'m</div><div class="sv">'+metaOf(n)+'</div></div>';}
+      else h+='<div class="slot" onclick="pickPos=\''+p+'\';pickQ=\'\';render()">+</div>';
+    }
+    h+='</div>';
+  });
+  h+='</div>';
+  if(count===15&&left>=0){
+    const sw=suggestSwaps();
+    h+='<div class="card"><div class="lbl">Suggested swaps</div>';
+    if(!sw.length)h+='<div style="font-size:12.5px;color:var(--sub);">No single swap improves this squad. Solid.</div>';
+    sw.forEach(s=>{h+='<div class="row"><span class="pn">'+s.o+' &rarr; <b>'+s.i+'</b></span><span class="val" style="color:var(--a);">+'+s.gain.toFixed(1)+' Meta</span></div>';});
+    h+='</div>';
+  }
+  if(left<0)h+='<div class="card" style="border-color:rgba(224,110,90,.5);"><div style="font-size:12.5px;color:#e08a76;">Over budget by &pound;'+(-left).toFixed(1)+'m. Remove someone or optimise.</div></div>';
+  return h;
+}
+function pickerHtml(){
+  const left=100-squadSpent();
+  let h='<div class="card"><div class="lbl">Pick a '+({G:"goalkeeper",D:"defender",M:"midfielder",F:"forward"})[pickPos]+' &middot; &pound;'+left.toFixed(1)+'m available</div>';
+  h+='<input type="text" id="pk" placeholder="Search" value="'+pickQ+'" oninput="pickQ=this.value;render();const e=document.getElementById(\'pk\');e.focus();e.setSelectionRange(e.value.length,e.value.length);">';
+  h+='<button onclick="pickPos=null;render()" style="width:100%;background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:7px 0;font-size:12px;margin:6px 0;">Cancel</button>';
+  const elig=poolPlayers().filter(x=>x.p===pickPos&&!squadFlat().includes(x.n)&&(pickQ===""||x.n.toLowerCase().includes(pickQ.toLowerCase())||x.t.toLowerCase().includes(pickQ.toLowerCase())));
+  elig.sort((a,b)=>metaOf(b.n)-metaOf(a.n));
+  elig.slice(0,40).forEach(x=>{
+    const afford=PRICE[x.n]<=left+0.001,capOk=clubCount(x.t)<3;
+    const dis=!afford||!capOk;
+    h+='<div class="row" style="'+(dis?'opacity:.35;':'cursor:pointer;')+'" '+(dis?'':'onclick="addPick(\''+esc(x.n)+'\')"')+'><span class="tc" style="background:'+(TEAMCOL[x.t]||'#888')+'22;color:'+(TEAMCOL[x.t]||'#aaa')+';">'+x.t+'</span><span class="pn">'+x.n+'<small>&pound;'+PRICE[x.n].toFixed(1)+'m'+(capOk?'':' &middot; club full')+(afford?'':' &middot; too dear')+'</small></span><span class="val" style="color:var(--a);font-weight:700;">'+metaOf(x.n)+'</span></div>';
+  });
+  return h+'</div>';
+}
 function accuracyView(){
   if(ACC.list===null&&!ACC.loading)setTimeout(loadAccuracy,0);
   let h='<div class="note"><b>Does the model actually work?</b> In the final 2 hours before every deadline the system freezes a copy of what the model knew. After the matches, predictions are compared with real FPL points here. Frozen records cannot be edited after the deadline, so the score is honest by construction.</div>';
@@ -252,11 +410,14 @@ const INJLBL=["Fit","Doubt","Out"];
 function cycleInj(n){const cur=statusOf(n);const nx=(cur+1)%3;const live=LIVESTAT[n]!==undefined?LIVESTAT[n]:0;if(nx===live)delete INJ[n];else INJ[n]=nx;saveInj();render();}
 // THE single weekly number. One formula, four inputs:
 // WeekScore = draft value (quality) x fixture (this GW) x availability x momentum
-function fxMult(t){
-  if(LIVEFX&&LIVEFX[t])return LIVEFX[t][gwSel]||0; // no fixture = blank GW = 0; double GW = both games summed
-  if(gwSel<=5)return (MOD[t]||[1,1,1,1,1])[gwSel-1];
+function fxMult(t,g){
+  g=g===undefined?gwSel:g;
+  if(LIVEFX&&LIVEFX[t])return LIVEFX[t][g]||0; // no fixture = blank GW = 0; double GW = both games summed
+  if(g<=5)return (MOD[t]||[1,1,1,1,1])[g-1];
   return FXW[t]?0.4+FXW[t]*0.2:1;
 }
+function predPtsAt(x,g){const s=gwSel;gwSel=g;const v=predPts(x);gwSel=s;return v;}
+function startProb(x){const s=statusOf(x.n);return s===2?0:(CHANCE[x.n]!=null?CHANCE[x.n]:(s===1?50:100));}
 function plannerView(){
   let h='<div class="card"><div class="lbl">Data status</div><div style="font-size:13px;">Gameweek '+META.gw+' &middot; '+META.date+'</div>';
   if(LIVEOK)h+='<div style="font-size:11.5px;color:var(--a);margin:2px 0 8px;">&#9679; Live: prices, injuries and fixture difficulty from the official FPL feed &middot; '+META.updated+'</div>';

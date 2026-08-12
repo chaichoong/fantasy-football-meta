@@ -61,11 +61,15 @@ confidence bands, pitch-layout squad builder, and the priority order. His gap ta
 partly stale (it predates phase 3 — predicted points, start probabilities and per-GW
 predictions already exist) but the product instincts were right.
 
-**Phase 5 — Squad Builder + Meta Rating (official game layer).** £100m budget, 2/5/5/3,
-max 3 per club, pitch-style layout. Meta Rating /100 per Leo's weights: form 20, predicted
-points 25, fixtures 20, expected minutes 15, value 10, long-term 10 — with a "Why 91?"
-breakdown so the rating is never a mystery. Optimise-my-squad via constrained optimisation
-(never brute force), then suggested swaps with the Meta gain per swap.
+**Phase 5 — Squad Builder + Meta Rating (official game layer). ✅ DONE 12 Aug 2026**
+Builder tab: £100m, 2/5/5/3, max 3 per club, pitch-style layout, per-player Meta chip.
+`metaParts()` implements Leo's weights exactly (form 20, predicted points 25, next-5
+fixtures 20, minutes 15, value 10, long-term 10), renormalised when a component has no
+data yet, with a "Why N?" breakdown at squad level. Optimiser = greedy cheapest-feasible
+start + best-single-swap local search to convergence (~0.6s, never brute force); verified
+output: legal 15, £100.0m, club cap respected. Suggested swaps with Meta gain shown for
+any full squad. Squad saves per device. Strategy toggles (safe/differential) deferred to
+phase 6 alongside Best Picks.
 
 **Phase 6 — Best Picks + confidence bands.** Captain (expected points AND ceiling),
 transfers in/out, differentials, best-per-position. Leo's five confidence bands
@@ -80,14 +84,6 @@ this lands; team-level xG aggregates may then make a modest win/draw/loss card h
 branding): dashboard command-centre homepage, player cards, pitch UI. Player photos remain
 parked pending a properly licensed source; club colours and initials do the visual work
 until then.
-
-### Phase 5 — Official-game layer
-£100m budget tracker, 2 GK / 5 DEF / 5 MID / 3 FWD, max 3 per club, and the squad builder
-as a proper constrained optimiser (never brute force). Strategy toggles: safe / balanced /
-differential. Multi-gameweek horizon.
-
-### Phase 6 — Captain picker + team news alerts
-Expected points AND ceiling (chance of a 10+ haul). Alert when a start probability drops.
 
 ## Parked (good ideas, wrong time)
 
