@@ -279,7 +279,7 @@ function fxOf(t){
 function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
 let tab="dash",posF="ALL",ownF="ALL",q="",sortMode="val";
 function esc(s){return s.replace(/'/g,"\\'")}
-const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",transfers:"Transfer Planner",prices:"Price Changes",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
+const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",transfers:"Transfer Planner",prices:"Price Changes",sync:"Devices",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
 function render(){
   updateStrip();
   const pt=document.getElementById("pageTitle");
@@ -297,6 +297,7 @@ function render(){
   if(tab==="news")return v.innerHTML=newsView();
   if(tab==="transfers")return v.innerHTML=transfersView();
   if(tab==="prices")return v.innerHTML=pricesView();
+  if(tab==="sync")return v.innerHTML=syncView();
   if(tab==="myteam"){if(MT.id&&MT.state==="idle"){MT.state="loading";setTimeout(loadMyTeam,0);}return v.innerHTML=myTeamView();}
   if(tab==="picks")return v.innerHTML=bestPicksView();
   if(tab==="compare")return v.innerHTML=compareView();
@@ -799,6 +800,57 @@ function myTeamView(){
 function mtRow(r,badge){
   const c=confidenceOf(r.x);
   return '<div class="row" style="cursor:pointer;" onclick="openPlayer(\''+esc(r.x.n)+'\')"><span class="tc" style="background:'+(TEAMCOL[r.x.t]||"#888")+'1f;color:'+(TEAMCOL[r.x.t]||"#888")+';">'+r.x.t+'</span><span class="pn">'+r.x.n+(badge?' <span class="conf" style="background:var(--accent)1f;color:var(--accent);">'+badge+'</span>':'')+'<small>'+POSNAME[r.x.p]+' &middot; &pound;'+(PRICE[r.x.n]||0).toFixed(1)+'m'+(r.x.ext?' &middot; not in our rated list':'')+'</small></span><span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span><span class="val">'+r.e.toFixed(1)+'</span></div>';
+}
+// ---- Sync (deliberately account-free) ----
+// The real need behind "accounts" is that your setup follows you between devices. That
+// needs no server, no password and no personal data: everything this app stores is a
+// handful of local keys, so we hand the user a code they can carry themselves.
+// Only these known keys are ever read or written — never arbitrary storage.
+const SYNC_KEYS=["fplHQteam","fplHQsquad","fplHQinj","fplHQmom","fplHQfxw","fplHQmeta"];
+const SYNC_LABEL={fplHQteam:"Linked FPL team id",fplHQsquad:"Squad you built",fplHQinj:"Fit / doubt / out overrides",fplHQmom:"Momentum from data packs",fplHQfxw:"Manual fixture ratings",fplHQmeta:"Gameweek marker"};
+let syncMsg="";
+function exportCode(){
+  const o={v:1};
+  SYNC_KEYS.forEach(k=>{const val=localStorage.getItem(k);if(val!==null)o[k]=val;});
+  return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/=+$/,"");
+}
+function importCode(code){
+  try{
+    const pad=code.trim()+"===".slice((code.trim().length+3)%4);
+    const o=JSON.parse(decodeURIComponent(escape(atob(pad))));
+    if(!o||typeof o!=="object"||o.v!==1)throw new Error("shape");
+    let n=0;
+    SYNC_KEYS.forEach(k=>{if(typeof o[k]==="string"){localStorage.setItem(k,o[k]);n++;}});
+    if(!n)throw new Error("empty");
+    syncMsg="Restored "+n+" item"+(n>1?"s":"")+". Reloading&hellip;";render();
+    setTimeout(()=>location.reload(),700);
+  }catch(e){syncMsg="That code was not readable. Copy the whole thing and try again.";render();}
+}
+function clearAll(){
+  SYNC_KEYS.forEach(k=>localStorage.removeItem(k));
+  syncMsg="Everything stored on this device has been cleared. Reloading&hellip;";render();
+  setTimeout(()=>location.reload(),700);
+}
+function syncView(){
+  const held=SYNC_KEYS.filter(k=>localStorage.getItem(k)!==null);
+  let h='<div class="note"><b>No account, no password, nothing to sign up for.</b> This app keeps everything on your own device. If you want your setup on your phone as well as your laptop, copy the code below and paste it on the other device. Nothing is sent anywhere and nothing is stored on a server.</div>';
+  h+='<div class="card"><div class="lbl">Stored on this device</div>';
+  if(!held.length)h+='<div style="font-size:12.5px;color:var(--sub);">Nothing yet. Link a team or build a squad and it will appear here.</div>';
+  held.forEach(k=>{h+='<div class="row"><span class="pn">'+SYNC_LABEL[k]+'</span><span class="val" style="color:var(--a);">saved</span></div>';});
+  h+='</div>';
+  if(held.length){
+    h+='<div class="card"><div class="lbl">Your transfer code</div><div style="font-size:12.5px;color:var(--sub);margin-bottom:7px;">Copy this, then paste it into the box on your other device.</div>';
+    h+='<textarea id="syncOut" readonly style="width:100%;height:78px;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:9px;font-size:11px;font-family:monospace;word-break:break-all;">'+exportCode()+'</textarea>';
+    h+='<button class="btn" style="margin-top:8px;" onclick="const t=document.getElementById(\'syncOut\');t.select();document.execCommand(\'copy\');syncMsg=\'Code copied.\';render()">Copy code</button></div>';
+  }
+  h+='<div class="card"><div class="lbl">Restore from a code</div>';
+  h+='<textarea id="syncIn" placeholder="Paste a transfer code here" style="width:100%;height:78px;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:9px;font-size:11px;font-family:monospace;"></textarea>';
+  h+='<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;"><button class="btn" onclick="importCode(document.getElementById(\'syncIn\').value)">Restore</button>';
+  h+='<button class="btn ghost" style="border-color:var(--danger);color:var(--danger);" onclick="if(confirm(\'Clear everything stored on this device?\'))clearAll()">Clear this device</button></div>';
+  if(syncMsg)h+='<div style="font-size:12.5px;color:var(--a);margin-top:9px;">'+syncMsg+'</div>';
+  h+='</div>';
+  h+='<div class="note"><b>Why there is no login.</b> An account would mean holding your email and password on a server, which brings data-protection duties and a thing to be breached. Everything here works without knowing who you are, so we do not ask.</div>';
+  return h;
 }
 // ---- Price changes ----
 // The official API exposes only the CURRENT net change and no history at all, so our

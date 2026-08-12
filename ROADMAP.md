@@ -160,7 +160,29 @@ result; nothing in the accuracy record depends on Meta, so no history was invali
   is undisclosed, so it ranks net transfers weighted by ownership. Never present it as a
   guaranteed overnight change. All four parts verified against simulated live data since
   every price field is zero preseason.
-- **Login / accounts** — nothing built, nothing collected. Do not build a fake sign-in.
+- **Login / accounts** — deliberately NOT built. Instead: account-free cross-device sync
+  ("Devices" section, 12 Aug 2026) — an export/import code carrying only the six known
+  localStorage keys, validated on import so an arbitrary key can never be written. No
+  server, no PII, no password, nothing to breach. This meets the actual user need
+  (setup follows you between devices) at zero legal weight.
+
+## BLOCKERS before charging anyone (Kevin's decision, 12 Aug 2026)
+
+Asked to build accounts + a Pro tier; stopped and escalated instead. Three things must be
+settled first, and two are commercial calls only Kevin can make:
+
+1. **Trademark.** The product is literally named "FPL Season HQ" and "FPL" is the Premier
+   League's mark. Free family tool = low risk. Charging money under their mark = real
+   exposure. Needs a rename before any paid launch.
+2. **Data licence.** Every number comes from the PL's free feed with no commercial
+   licence. Selling access to it is materially different from personal use. Needs a
+   proper check, and a plan B source.
+3. **Architecture + money handling.** GitHub Pages is static and cannot hold secrets, so
+   payments need a real backend (Cloudflare Worker + Stripe Checkout) plus terms, refunds,
+   a privacy notice and a GDPR basis. Claude must never handle Stripe keys or card details.
+
+Until 1 and 2 are cleared, the honest position is what the sidebar now says: free and open,
+no paid tier, nothing to buy.
 
 ## Parked (good ideas, wrong time)
 
