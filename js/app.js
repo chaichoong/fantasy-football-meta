@@ -14,7 +14,7 @@ function saveInj(){try{localStorage.setItem("fplHQinj",JSON.stringify(INJ));loca
 // Official FPL feed via our relay (the API blocks browsers directly; the relay adds CORS + 15-min cache).
 const RELAY="https://fpl-relay.kevinbrittain.workers.dev";
 
-let LIVESTAT={},CHANCE={},PRICE={},LIVEFX=null,LIVEOK=false,DEADLINE="";
+let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},LIVEFX=null,LIVEOK=false,DEADLINE="";
 function fdrMult(d){return {1:1.35,2:1.25,3:1.0,4:0.8,5:0.6}[d]||1;}
 async function loadLive(){
   lastLoad=Date.now();
@@ -25,12 +25,13 @@ async function loadLive(){
     ]);
     const byId={};bs.elements.forEach(e=>byId[e.id]=e);
     const short={};bs.teams.forEach(t=>short[t.id]=t.short_name);
-    LIVESTAT={};CHANCE={};PRICE={};
+    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};
     P.forEach(x=>{
       const e=byId[FPLID[x.n]];if(!e)return;
       PRICE[x.n]=e.now_cost/10;
       LIVESTAT[x.n]=e.status==="a"?0:e.status==="d"?1:2;
       if(e.chance_of_playing_next_round!=null&&e.chance_of_playing_next_round<100)CHANCE[x.n]=e.chance_of_playing_next_round;
+      LIVEEL[x.n]={form:parseFloat(e.form)||0,ep:parseFloat(e.ep_next)||0};
     });
     LIVEFX={};
     fx.forEach(f=>{
@@ -53,6 +54,26 @@ async function loadLive(){
   render();
 }
 function statusOf(n){return INJ[n]!==undefined?INJ[n]:(LIVESTAT[n]!==undefined?LIVESTAT[n]:0)}
+// ---- Prediction model V1 (phase 3) ----
+// Predicted GW points = blended base x fixture x availability x momentum.
+// Base blends up to three signals, weights renormalised over whichever exist:
+//   40% draft projection (season points / 38), 30% live form, 30% FPL's own ep_next.
+// Preseason form is 0 and drops out, so the model leans on projection + ep_next
+// until real matches are played. All factors are shown per player in the planner.
+function predParts(x){
+  const L=LIVEEL[x.n]||{};
+  const sig=[["Draft projection",0.4,x.pts/38]];
+  if(L.form>0)sig.push(["Live form",0.3,L.form]);
+  if(L.ep>0)sig.push(["FPL expected",0.3,L.ep]);
+  const wsum=sig.reduce((s,c)=>s+c[1],0);
+  const base=sig.reduce((s,c)=>s+c[1]*c[2],0)/wsum;
+  const st=statusOf(x.n);
+  const avail=st===2?0:st===1?(CHANCE[x.n]!=null?CHANCE[x.n]/100:0.6):1;
+  const fx=fxMult(x.t);
+  const mom=1+(MOM[x.n]||0)*0.1;
+  return {sig,wsum,base,avail,fx,mom,pred:base*fx*avail*mom};
+}
+function predPts(x){return predParts(x).pred}
 function updateStrip(){
   const el=document.getElementById("liveStrip");if(!el)return;
   if(LIVEOK)el.innerHTML='<span style="color:var(--a);font-weight:600;">&#9679; Live</span> &middot; GW'+META.gw+' &middot; '+META.date+' &middot; updated '+META.updated.replace("live feed, ","");
@@ -140,11 +161,11 @@ function rowHtml(x,showOwner){
 function playersView(){
   let h='<input type="text" id="srch" placeholder="Search player or team" value="'+q+'" oninput="q=this.value;render();document.getElementById(\'srch\').focus();const el=document.getElementById(\'srch\');el.setSelectionRange(el.value.length,el.value.length);">';
   h+='<div class="filters">'+["ALL","F","M","D","G"].map(p=>'<button onclick="posF=\''+p+'\';render()" class="'+(posF===p?"on":"")+'">'+(p==="ALL"?"All":POSNAME[p])+'</button>').join("")+'<button onclick="ownF=ownF===\'F\'?\'ALL\':\'F\';render()" class="'+(ownF==="F"?"on":"")+'">Free only</button></div>';
-  h+='<div class="filters">'+[["val","Score"],["price","Price"],["vpm","&pound; value"],["pp","PP/90"],["start","Start %"]].map(s=>'<button onclick="sortMode=\''+s[0]+'\';render()" class="'+(sortMode===s[0]?"on":"")+'">'+s[1]+'</button>').join("")+'</div>';
+  h+='<div class="filters">'+[["val","Score"],["pred","Pred pts"],["price","Price"],["vpm","&pound; value"],["pp","PP/90"],["start","Start %"]].map(s=>'<button onclick="sortMode=\''+s[0]+'\';render()" class="'+(sortMode===s[0]?"on":"")+'">'+s[1]+'</button>').join("")+'</div>';
   h+='<div class="note">Score column: draft value &middot; points per 90. Prices and injury flags are live from the official feed. Sort by Score, Price, &pound; value (value per million), PP/90 or Start %. '+P.length+' players covered.</div>';
   let rows=P.filter(x=>(posF==="ALL"||x.p===posF)&&(ownF==="ALL"||x.o==="F")&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
   const startP=x=>{const s=statusOf(x.n);return s===2?0:(CHANCE[x.n]!=null?CHANCE[x.n]:(s===1?50:100));};
-  const sortKey={val:x=>x.v,price:x=>PRICE[x.n]||0,vpm:x=>PRICE[x.n]?x.v/PRICE[x.n]:0,pp:x=>x.pp,start:x=>startP(x)}[sortMode];
+  const sortKey={val:x=>x.v,pred:x=>predPts(x),price:x=>PRICE[x.n]||0,vpm:x=>PRICE[x.n]?x.v/PRICE[x.n]:0,pp:x=>x.pp,start:x=>startP(x)}[sortMode];
   rows=rows.slice().sort((a,b)=>sortKey(b)-sortKey(a)||b.v-a.v);
   if(posF==="ALL"){rows.slice(0,260).forEach(x=>h+=rowHtml(x,true));}
   else{rows.forEach(x=>h+=rowHtml(x,true));}
@@ -160,7 +181,7 @@ function fixturesView(){
   h+='<div class="note">Season opener 23 August, GW1 deadline Friday 21 August. Window closes 1 September, so re-check any player in transfer talk before each of the first three deadlines. Ratings and notes from the fixture model dated 5 August; The GW Plan tab now uses live official fixture difficulty for every gameweek; this page remains the narrative read on the opening runs.</div>';
   return h;
 }
-let planTeam="K",gwSel=META.gw||1;
+let planTeam="K",gwSel=META.gw||1,expanded=null;
 const INJLBL=["Fit","Doubt","Out"];
 function cycleInj(n){const cur=statusOf(n);const nx=(cur+1)%3;const live=LIVESTAT[n]!==undefined?LIVESTAT[n]:0;if(nx===live)delete INJ[n];else INJ[n]=nx;saveInj();render();}
 // THE single weekly number. One formula, four inputs:
@@ -169,12 +190,6 @@ function fxMult(t){
   if(LIVEFX&&LIVEFX[t])return LIVEFX[t][gwSel]||0; // no fixture = blank GW = 0; double GW = both games summed
   if(gwSel<=5)return (MOD[t]||[1,1,1,1,1])[gwSel-1];
   return FXW[t]?0.4+FXW[t]*0.2:1;
-}
-function gwScore(x){
-  const inj=statusOf(x.n);
-  if(inj===2)return 0;
-  const mom=1+(MOM[x.n]||0)*0.1;
-  return (x.v/10)*fxMult(x.t)*(inj===1?0.6:1)*mom;
 }
 function plannerView(){
   let h='<div class="card"><div class="lbl">Data status</div><div style="font-size:13px;">Gameweek '+META.gw+' &middot; '+META.date+'</div>';
@@ -186,7 +201,7 @@ function plannerView(){
   h+='<select onchange="planTeam=this.value;render()">'+["K","L","J"].map(o=>'<option value="'+o+'"'+(planTeam===o?" selected":"")+'>'+NAMES[o]+"'s plan</option>").join("")+'</select>';
   const gws=[];for(let g=Math.max(1,META.gw-1);g<=Math.min(38,META.gw+3);g++)gws.push(g);
   h+='<div class="filters">'+gws.map(g=>'<button onclick="gwSel='+g+';render()" class="'+(gwSel===g?"on":"")+'">GW'+g+'</button>').join("")+'</div>';
-  const mine=P.filter(x=>x.o===planTeam).map(x=>({...x,e:gwScore(x)}));
+  const mine=P.filter(x=>x.o===planTeam).map(x=>({...x,e:predPts(x)}));
   const gk=mine.filter(x=>x.p==="G").sort((a,b)=>b.e-a.e);
   const out=mine.filter(x=>x.p!=="G").sort((a,b)=>b.e-a.e);
   let xi=[gk[0]],d=0,m=0,f=0;
@@ -197,18 +212,28 @@ function plannerView(){
     if(isNeeded||left>reserved){xi.push(x);if(x.p==="D")d++;if(x.p==="M")m++;if(x.p==="F")f++;}
   });
   const bench=mine.filter(x=>!xi.includes(x));
+  function factorsHtml(x){
+    const f=predParts(x);
+    let rows=f.sig.map(s=>'<div style="display:flex;justify-content:space-between;"><span>'+s[0]+' ('+Math.round(s[1]/f.wsum*100)+'%)</span><span>'+s[2].toFixed(2)+' pts</span></div>').join('');
+    rows+='<div style="display:flex;justify-content:space-between;"><span>Blended base</span><span>'+f.base.toFixed(2)+' pts</span></div>';
+    rows+='<div style="display:flex;justify-content:space-between;"><span>Fixture</span><span>&times;'+f.fx.toFixed(2)+(f.fx===0?' (blank GW)':f.fx>1.5?' (double GW)':'')+'</span></div>';
+    rows+='<div style="display:flex;justify-content:space-between;"><span>Availability</span><span>&times;'+f.avail.toFixed(2)+'</span></div>';
+    if(f.mom!==1)rows+='<div style="display:flex;justify-content:space-between;"><span>Momentum</span><span>&times;'+f.mom.toFixed(2)+'</span></div>';
+    rows+='<div style="display:flex;justify-content:space-between;font-weight:700;color:var(--txt);border-top:1px solid var(--line);padding-top:4px;margin-top:2px;"><span>Predicted</span><span>'+f.pred.toFixed(1)+' pts</span></div>';
+    return '<div style="font-size:11.5px;color:var(--sub);padding:6px 4px 8px 34px;border-bottom:1px solid var(--line);line-height:1.8;">'+rows+'</div>';
+  }
   function prow(x,strong){
     const inj=statusOf(x.n);const mo=MOM[x.n]||0;
     const ch=CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'';
     const moChip=mo?'<span style="font-size:10px;font-weight:700;color:'+(mo>0?'var(--a)':'#e08a76')+';flex-shrink:0;">'+(mo>0?'&#9650;':'&#9660;')+Math.abs(mo)+'</span>':'';
-    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span>'+ch+moChip+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'#e08a76':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>';
+    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn" style="cursor:pointer;" onclick="expanded=expanded===\''+esc(x.n)+'\'?null:\''+esc(x.n)+'\';render()">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span>'+ch+moChip+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'#e08a76':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>'+(expanded===x.n?factorsHtml(x):'');
   }
-  h+='<div class="card"><div class="lbl">Recommended XI &middot; Gameweek '+gwSel+'</div>';
+  h+='<div class="card"><div class="lbl">Recommended XI &middot; Gameweek '+gwSel+' &middot; predicted points &middot; tap a name for why</div>';
   xi.sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.e-a.e).forEach(x=>{h+=prow(x)});
   h+='</div><div class="card"><div class="lbl">Bench</div>';
   bench.sort((a,b)=>b.e-a.e).forEach(x=>{h+=prow(x)});
   h+='</div>';
-  const free=P.filter(x=>x.o==="F").map(x=>({...x,e:gwScore(x)})).sort((a,b)=>b.e-a.e);
+  const free=P.filter(x=>x.o==="F").map(x=>({...x,e:predPts(x)})).sort((a,b)=>b.e-a.e);
   h+='<div class="card"><div class="lbl">Waiver targets this gameweek</div>';
   let shown=0;
   free.forEach(x=>{if(shown>=10)return;
@@ -218,7 +243,7 @@ function plannerView(){
   });
   if(!shown)h+='<div class="note" style="margin:0">No free agent beats this squad this week. Hold.</div>';
   h+='</div>';
-  h+='<div class="note"><b>One score, four inputs.</b> Week score = draft value (player quality, fixed at draft night) &times; this week\'s fixture &times; availability &times; momentum. Prices, injuries, chance-of-playing and fixture difficulty for all 38 gameweeks come from the official FPL feed, loaded on open and on refresh (the feed updates every 15 minutes). A blank gameweek scores 0; a double gameweek counts both matches. Tap any status button to override the feed; cycling back to the feed\'s value hands control back to it. Momentum still arrives via a pasted data pack. Never drop an A-grade on one bad week; momentum is a tiebreaker, not a strategy.</div>';
+  h+='<div class="note"><b>Predicted points, openly worked.</b> Every number here is predicted FPL points for the selected gameweek: a blend of the draft projection (40%), live form (30%) and the official FPL expected score (30%), weights renormalised when a signal is missing, then multiplied by fixture, availability and momentum. Tap any player name to see the exact working. Until real matches are played, form is empty and the model leans on projection plus the official expectation. Squad standings on the Squads tab still use the fixed draft value, so the family table never moves under you. Never drop an A-grade on one bad week.</div>';
   return h;
 }
 document.querySelector(".tabs").addEventListener("click",e=>{if(e.target.dataset.t){tab=e.target.dataset.t;render()}});
