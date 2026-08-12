@@ -36,9 +36,13 @@ momentum.
 Price beside every name. Sort by price, predicted points, value (points per £m), start
 probability. Better search and filters. Club-badge initials instead of photos.
 
-### Phase 3 — Simple prediction score (Version 1, statistical)
-Form + fixture + expected minutes + last season, weights shown openly on the page as
-"prediction factors" so anyone can audit why the model likes a player. No ML yet.
+### Phase 3 — Simple prediction score (Version 1, statistical) ✅ DONE 12 Aug 2026
+`predParts()` in js/app.js: predicted GW points = blend(40% draft projection, 30% live
+form, 30% official ep_next — weights renormalised over available signals) × fixture ×
+availability (official chance-of-playing when present) × momentum. The planner ranks and
+displays in predicted-points units; tapping a player shows every factor line by line.
+Squads standings stay on fixed draft value by design. The repo was also restructured in
+the same phase: index.html + css/app.css + js/data.js + js/app.js, no build step.
 
 ### Phase 4 — Prediction accuracy page
 Each week, record the predicted top 10 before the deadline; show the real top 10 after.

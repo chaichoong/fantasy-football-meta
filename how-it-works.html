@@ -67,7 +67,7 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <div class="lbl">GW Plan</div>
 <p>The useful one. Pick whose team you want (yours, Kevin's or James's) and pick a gameweek. It gives you:</p>
 <ul>
-<li>a <b>recommended eleven</b>, ordered by score</li>
+<li>a <b>recommended eleven</b>, ranked by predicted FPL points; tap any name to see exactly how its number was built</li>
 <li>your <b>bench</b>, so you can see who nearly made it</li>
 <li><b>waiver targets</b>: undrafted players who score higher than your weakest player in the same position, and it names who to drop</li>
 </ul>
@@ -77,7 +77,8 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <h2>The score: one formula, four parts</h2>
 <p>Everything in the GW Plan tab comes from a single sum:</p>
 
-<div class="formula">week score = quality &times; fixture &times; availability &times; momentum</div>
+<div class="formula">predicted points = blended base &times; fixture &times; availability &times; momentum</div>
+<p>The blended base mixes up to three signals: the <b>draft projection</b> (40%), the player's <b>live form</b> (30%) and the <b>official FPL expected score</b> (30%). If a signal is missing, for example form before any matches are played, its weight is shared out over the others. Tap any player's name in the GW Plan tab and the app shows the exact working, line by line, so you never have to trust a mystery number.</p>
 
 <h3>1. Quality (the big one)</h3>
 <p>A fixed number out of 100 given to every player on draft night. Haaland is 100, the best midfielders are in the 80s and 90s, squad filler is in the 20s and 30s, and Ekitike is 5 because he is injured until spring.</p>
@@ -95,7 +96,7 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <p>Live official difficulty ratings now cover every gameweek of the season. The hand-written ratings for gameweeks 1 to 5 remain as a backup if the feed is ever unreachable.</p>
 
 <h3>3. Availability</h3>
-<p>Fit counts as 1, so no change. Doubt counts as 0.6, so he drops but stays pickable. Out counts as 0, so his score becomes zero and he falls out of the eleven. This comes from the Fit / Doubt / Out buttons you tap.</p>
+<p>Fit counts as 1. Doubt uses the official chance-of-playing when the feed has one (75% chance = 0.75), or 0.6 otherwise. Out counts as 0 and drops him from the eleven. The feed sets these automatically; your taps override it, and cycling back to the feed's value hands control back.</p>
 
 <h3>4. Momentum</h3>
 <p>A hot or cold streak, from minus 2 to plus 2, worth up to 20 per cent either way. It only appears when new data is pasted in. It is a tiebreaker between two similar players, not a reason to bin someone good.</p>
@@ -115,7 +116,7 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <div class="card warn">
 <div class="lbl">Read this bit properly</div>
 <ul>
-<li><b>Facts are live, opinions are not.</b> Prices, injuries, chance-of-playing and fixture difficulty come from the official FPL feed and refresh every 15 minutes. The quality scores and grades are still the fixed draft-night model, dated August 2026. So it knows who got injured this morning, but its opinion of how good a player is does not move by itself.</li>
+<li><b>Half live, half fixed, on purpose.</b> Prices, injuries, form, the official expected score and fixture difficulty are live from the feed. The draft-night quality score and the grades are fixed. So predictions move with real news and real form, while the Squads standings never shift under you.</li>
 <li><b>The Refresh button refreshes facts only.</b> It re-pulls prices, injuries and fixtures from the feed. It does not recalculate anyone's quality score, and momentum still arrives by pasting a data pack.</li>
 <li><b>These are predictions, not results.</b> No real FPL points, no league table, no live scores. It never finds out whether it was right.</li>
 <li><b>It is not connected to the official FPL game.</b> It cannot see your real team and it cannot make transfers. You still do all of that yourself.</li>
