@@ -92,7 +92,7 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 
 <h3>2. Fixture</h3>
 <p>How easy that club's game is that week. An easy game multiplies a player up, a horrible one drags him down. For gameweeks 1 to 5 these are already in the file, from about 0.55 for a wipeout up to 1.35 for a great matchup. Man Utd in gameweek 4 is 0.6, because it is the Manchester derby.</p>
-<p>After gameweek 5 there are no fixture numbers in the file yet, so every club counts as neutral until someone pastes in new data.</p>
+<p>Live official difficulty ratings now cover every gameweek of the season. The hand-written ratings for gameweeks 1 to 5 remain as a backup if the feed is ever unreachable.</p>
 
 <h3>3. Availability</h3>
 <p>Fit counts as 1, so no change. Doubt counts as 0.6, so he drops but stays pickable. Out counts as 0, so his score becomes zero and he falls out of the eleven. This comes from the Fit / Doubt / Out buttons you tap.</p>
@@ -115,26 +115,26 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <div class="card warn">
 <div class="lbl">Read this bit properly</div>
 <ul>
-<li><b>It is not live.</b> Nothing updates by itself. The player projections are dated 4 August 2026, the fixture ratings 5 August 2026, and injuries 8 August 2026. If someone got injured after that, this page does not know.</li>
-<li><b>The Refresh live data button does not work here.</b> It only ever worked inside the Claude app. On this web link it will show a message telling you to paste data instead.</li>
+<li><b>Facts are live, opinions are not.</b> Prices, injuries, chance-of-playing and fixture difficulty come from the official FPL feed and refresh every 15 minutes. The quality scores and grades are still the fixed draft-night model, dated August 2026. So it knows who got injured this morning, but its opinion of how good a player is does not move by itself.</li>
+<li><b>The Refresh button refreshes facts only.</b> It re-pulls prices, injuries and fixtures from the feed. It does not recalculate anyone's quality score, and momentum still arrives by pasting a data pack.</li>
 <li><b>These are predictions, not results.</b> No real FPL points, no league table, no live scores. It never finds out whether it was right.</li>
 <li><b>It is not connected to the official FPL game.</b> It cannot see your real team and it cannot make transfers. You still do all of that yourself.</li>
 <li><b>It does not pick a captain</b> or handle chips like Triple Captain and Bench Boost.</li>
-<li><b>Fixture difficulty only exists for gameweeks 1 to 5.</b> Choose a later week and every club is treated as average.</li>
+<li><b>Fixture difficulty now covers all 38 gameweeks</b>, straight from the official ratings. A blank gameweek scores a player 0 and a double gameweek counts both matches.</li>
 <li><b>It does not sync between devices.</b> Your Fit / Doubt / Out taps save to the phone or laptop you used, and only that one. Tapping things on your phone changes nothing on your dad's.</li>
 <li><b>It is one model's opinion.</b> All the numbers trace back to a single projection source plus some human judgement on top. Treat it as a strong second opinion, not the truth.</li>
 </ul>
 </div>
 
 <h2>How it was built</h2>
-<p>It is one file called <span class="sub">index.html</span>, about 37 kilobytes, and that file is the whole app. There is no server, no database, no account and no internet connection needed once the page has loaded. The player data is written straight into the file as a list, and the page draws the tabs from that list when you open it.</p>
+<p>It is one file called <span class="sub">index.html</span>, and that file is the whole app: no database, no account. The player list is written into the file, and on load the page calls a small relay we run in the cloud, which fetches the official FPL feed, adds the permission headers browsers need, and caches it for 15 minutes. That is how prices and injuries stay current on a page with no server of its own.</p>
 <p>Nothing you do gets sent anywhere. The only thing it stores is your Fit / Doubt / Out taps, and those sit in your own browser.</p>
 <p>It was built in a conversation with Claude across a few days, starting as a draft list, then a draft board, then this. The code lives publicly on GitHub so it can be updated later.</p>
 
 <h2>Using it during the season</h2>
 <ol style="margin:0 0 10px 18px;">
 <li style="font-size:14px;margin-bottom:6px;">Friday, before the deadline, open the GW Plan tab.</li>
-<li style="font-size:14px;margin-bottom:6px;">Ask Kevin for a fresh <b>data pack</b>, which is a block of text from Claude with the current gameweek, injuries and fixture ratings. Paste it in the box and hit Apply pack.</li>
+<li style="font-size:14px;margin-bottom:6px;">Tap <b>Refresh live data</b>. Prices, injuries and fixtures update themselves. A pasted data pack is only needed for momentum (hot and cold streaks).</li>
 <li style="font-size:14px;margin-bottom:6px;">Check team news yourself and tap any Fit / Doubt / Out buttons that look wrong.</li>
 <li style="font-size:14px;margin-bottom:6px;">Read the recommended eleven, then set that team in the real FPL app.</li>
 <li style="font-size:14px;margin-bottom:6px;">Glance at the waiver list. One in, one out, and only if the gap is worth it.</li>
@@ -142,7 +142,7 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <p>Two rules built into the thing that are worth knowing. Never drop an A grade because of one cold week. And a hot streak is a tiebreaker, not a plan.</p>
 
 <a class="back" href="index.html">&larr; Back to the app</a>
-<p class="foot">Data sources: player projections dated 4 August 2026, fixture model dated 5 August 2026, injury and transfer checks dated 8 August 2026. Season opens 23 August 2026.</p>
+<p class="foot">Data sources: live official FPL feed for prices, injuries, chance-of-playing and fixture difficulty (refreshed every 15 minutes); quality scores from the draft-night model dated August 2026. Season opens 23 August 2026.</p>
 
 </body>
 </html>

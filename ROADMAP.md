@@ -22,10 +22,15 @@ tools stay, live data serves everything, official-game features arrive as their 
 
 ## Phases
 
-### Phase 1 — Live data relay
-Cloudflare Worker proxying `bootstrap-static` + `fixtures` with caching. The app fetches on
-load: real prices, fixtures, injuries, official chance-of-playing. Kills the manual
-"data pack" paste for facts. **This is the single biggest unlock.**
+### Phase 1 — Live data relay ✅ DONE 12 Aug 2026
+Worker live at `https://fpl-relay.kevinbrittain.workers.dev` (`relay/worker.js`): proxies
+`/bootstrap` + `/fixtures` only, CORS on, 15-min edge cache, all other paths 404. The app
+fetches on load and on refresh: real prices, injuries, chance-of-playing, and official
+fixture difficulty for all 38 gameweeks (blank GW = 0, double GW = both games summed).
+Manual Fit/Doubt/Out taps override the feed; cycling back to the feed's value returns
+control to it. 318 of 319 players mapped to official IDs (`FPLID` in index.html); Rodri is
+not in this season's game and stays on static data. The pasted "data pack" now only carries
+momentum.
 
 ### Phase 2 — Player database upgrade
 Price beside every name. Sort by price, predicted points, value (points per £m), start
@@ -57,6 +62,20 @@ Expected points AND ceiling (chance of a 10+ haul). Alert when a start probabili
 - **Player photos** — licensing risk, and the safe sources cost money. Badge initials
   give most of the visual payoff at zero risk.
 - **Betting odds** — not doing gambling odds in any form. Probabilities only.
+
+## Business pivot (12 Aug 2026)
+
+Kevin's call: this is now being built toward a sellable subscription product, not just the
+family tool. Two standing risks to carry into every phase:
+
+1. **Data dependency.** The whole product leans on the Premier League's free feed, which has
+   no formal commercial licence. Before charging anyone: check the position properly and
+   have a plan B data source.
+2. **Trademark.** "Fantasy Premier League" and "FPL" branding belong to the Premier League.
+   A paid product needs its own name and identity before launch.
+
+Also: the current public repo shows the family's squads and first names. Fine today; strip
+or genericise before any public product launch.
 
 ## Standing cautions
 
