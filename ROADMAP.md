@@ -71,9 +71,25 @@ output: legal 15, £100.0m, club cap respected. Suggested swaps with Meta gain s
 any full squad. Squad saves per device. Strategy toggles (safe/differential) deferred to
 phase 6 alongside Best Picks.
 
-**Phase 6 — Best Picks + confidence bands.** Captain (expected points AND ceiling),
-transfers in/out, differentials, best-per-position. Leo's five confidence bands
-(very high 85-100 ... very low <30) applied across all predictions.
+**Phase 6 — Best Picks + confidence bands + Player Comparison. ✅ DONE 12 Aug 2026**
+Two new tabs. **Best Picks** = the decision engine: captain (with ceiling = per-90 rate
+× fixture), warnings from your own squad, transfer targets measured against your weakest
+player, differentials under 10% owned, best-per-position, best next-5 fixture runs.
+**Compare** = Leo's spec: 2-4 players, Meta bars, category table with the winner
+highlighted, verdict (best overall / value / fixtures / differential / safest) and a
+plain-English "Why?" that also states what would flip the call. "Find alternatives" pulls
+the top 3 same-position players at the same price or cheaper. Builder swap rows and Best
+Picks rows both open Compare, so the tools connect. `confidenceOf()` implements the five
+bands from 50% minutes certainty + 30% signal agreement + 20% data completeness — it
+measures model trust, NOT player quality; keep that distinction in the UI copy.
+Ownership (`selected_by_percent`) is now captured from the feed.
+
+**Positioning (Leo's competitor review, 12 Aug).** Fantasy Football Hub, FF Scout, FPL Team
+and FPL Review already win the "more statistics" race. Do not enter it. The identity is
+**"do not just give me data, tell me what to do and why"** — a decision engine with a
+transparent Meta Rating, comparisons that end in a verdict, confidence on every number,
+and a public accuracy record. Every future feature should answer "what do I do?" before it
+answers "what is the number?".
 
 **Phase 7 — Player prediction page.** Per player: goal %, assist %, clean-sheet %,
 60+ minutes %, derived from the feed's expected_goals/assists per-90 suite (confirmed

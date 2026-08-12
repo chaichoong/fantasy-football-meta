@@ -14,7 +14,7 @@ function saveInj(){try{localStorage.setItem("fplHQinj",JSON.stringify(INJ));loca
 // Official FPL feed via our relay (the API blocks browsers directly; the relay adds CORS + 15-min cache).
 const RELAY="https://fpl-relay.kevinbrittain.workers.dev";
 
-let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},LIVEFX=null,LIVEOK=false,DEADLINE="";
+let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},LIVEFX=null,LIVEOK=false,DEADLINE="";
 function fdrMult(d){return {1:1.35,2:1.25,3:1.0,4:0.8,5:0.6}[d]||1;}
 async function loadLive(){
   lastLoad=Date.now();
@@ -25,13 +25,14 @@ async function loadLive(){
     ]);
     const byId={};bs.elements.forEach(e=>byId[e.id]=e);
     const short={};bs.teams.forEach(t=>short[t.id]=t.short_name);
-    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};
+    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};OWN={};
     P.forEach(x=>{
       const e=byId[FPLID[x.n]];if(!e)return;
       PRICE[x.n]=e.now_cost/10;
       LIVESTAT[x.n]=e.status==="a"?0:e.status==="d"?1:2;
       if(e.chance_of_playing_next_round!=null&&e.chance_of_playing_next_round<100)CHANCE[x.n]=e.chance_of_playing_next_round;
       LIVEEL[x.n]={form:parseFloat(e.form)||0,ep:parseFloat(e.ep_next)||0};
+      OWN[x.n]=parseFloat(e.selected_by_percent)||0;
     });
     LIVEFX={};
     fx.forEach(f=>{
@@ -97,6 +98,36 @@ function metaParts(x){
   const total=Math.round(live.reduce((s,c)=>s+c[1]*c[2],0)/wsum);
   return {parts,wsum,total};
 }
+// ---- Confidence (phase 6, Leo's bands) ----
+// Confidence is NOT how good the player is. It is how much the model trusts its own
+// number: 50% minutes certainty, 30% how closely the signals agree, 20% how many
+// signals exist at all. Early season has fewer signals, so confidence is honestly
+// lower for everyone until matches are played.
+const BANDS=[[85,"Very high","var(--a)"],[70,"High","var(--a)"],[50,"Medium","var(--warn)"],[30,"Low","#e08a76"],[0,"Very low","#e08a76"]];
+function confidenceOf(x){
+  const f=predParts(x),mins=startProb(x),n=f.sig.length;
+  const completeness=n>=3?100:n===2?70:40;
+  let agree=60;
+  if(n>1){
+    const vals=f.sig.map(s=>s[2]),mean=vals.reduce((a,b)=>a+b,0)/vals.length;
+    const rel=mean>0?(Math.max.apply(null,vals)-Math.min.apply(null,vals))/mean:1;
+    agree=Math.max(0,Math.min(100,100-rel*100));
+  }
+  const pct=Math.round(0.5*mins+0.3*agree+0.2*completeness);
+  const band=BANDS.find(b=>pct>=b[0]);
+  const why=[],risk=[];
+  if(mins>=90)why.push("expected to start");else if(mins>=70)why.push("likely to start");
+  if(agree>=75)why.push("the signals agree");
+  if((LIVEEL[x.n]||{}).form>=5)why.push("strong recent form");
+  if(f.fx>=1.15)why.push("favourable fixture");
+  if(mins<70)risk.push(mins===0?"ruled out":"rotation or fitness risk");
+  if(n<3)risk.push("limited data this early in the season");
+  if(agree<50&&n>1)risk.push("the signals disagree");
+  if(f.fx>0&&f.fx<0.9)risk.push("tough fixture");
+  if(f.fx===0)risk.push("no fixture this gameweek");
+  return {pct,band:band[1],col:band[2],why,risk};
+}
+function confChip(x){const c=confidenceOf(x);return '<span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span>';}
 let MCACHE={};
 function metaOf(n){if(MCACHE[n]===undefined){const x=P.find(y=>y.n===n);MCACHE[n]=x?metaParts(x).total:0;}return MCACHE[n];}
 function clearMeta(){MCACHE={};}
@@ -201,6 +232,8 @@ function render(){
   if(tab==="planner")return v.innerHTML=plannerView();
   if(tab==="accuracy")return v.innerHTML=accuracyView();
   if(tab==="builder")return v.innerHTML=builderView();
+  if(tab==="picks")return v.innerHTML=bestPicksView();
+  if(tab==="compare")return v.innerHTML=compareView();
 }
 function squadTotal(o){return P.filter(x=>x.o===o).reduce((s,x)=>s+x.v,0)}
 function squadsView(){
@@ -352,10 +385,19 @@ function builderView(){
   });
   h+='</div>';
   if(count===15&&left>=0){
+    const byPos=["F","M","D","G"].map(p=>({p,avg:SQUAD[p].length?Math.round(SQUAD[p].reduce((s,n)=>s+metaOf(n),0)/SQUAD[p].length):0}));
+    const worst=byPos.slice().sort((a,b)=>a.avg-b.avg)[0],bestP=byPos.slice().sort((a,b)=>b.avg-a.avg)[0];
+    const risky=squadFlat().filter(n=>{const x=P.find(y=>y.n===n);return x&&confidenceOf(x).pct<60;});
+    const POSW={F:"forwards",M:"midfield",D:"defence",G:"goalkeepers"};
+    h+='<div class="card"><div class="lbl">Squad read</div><div style="font-size:12.5px;line-height:1.9;">';
+    h+='<div>&#128994; Strength: '+POSW[bestP.p]+' (Meta '+bestP.avg+')</div>';
+    h+='<div>&#128308; Weakness: '+POSW[worst.p]+' (Meta '+worst.avg+')</div>';
+    h+='<div>'+(risky.length?'&#128993; Concern: '+risky.length+' player'+(risky.length>1?'s':'')+' below 60% confidence ('+risky.slice(0,2).map(n=>n.split(" ").slice(-1)[0]).join(", ")+(risky.length>2?"&hellip;":"")+')':'&#128994; No confidence concerns in this squad')+'</div>';
+    h+='</div></div>';
     const sw=suggestSwaps();
     h+='<div class="card"><div class="lbl">Suggested swaps</div>';
     if(!sw.length)h+='<div style="font-size:12.5px;color:var(--sub);">No single swap improves this squad. Solid.</div>';
-    sw.forEach(s=>{h+='<div class="row"><span class="pn">'+s.o+' &rarr; <b>'+s.i+'</b></span><span class="val" style="color:var(--a);">+'+s.gain.toFixed(1)+' Meta</span></div>';});
+    sw.forEach(s=>{h+='<div class="row" style="cursor:pointer;" onclick="CMP=[\''+esc(s.o)+'\',\''+esc(s.i)+'\'];tab=\'compare\';render()"><span class="pn">'+s.o+' &rarr; <b>'+s.i+'</b></span><span class="val" style="color:var(--a);">+'+s.gain.toFixed(1)+' Meta</span></div>';});
     h+='</div>';
   }
   if(left<0)h+='<div class="card" style="border-color:rgba(224,110,90,.5);"><div style="font-size:12.5px;color:#e08a76;">Over budget by &pound;'+(-left).toFixed(1)+'m. Remove someone or optimise.</div></div>';
@@ -374,6 +416,130 @@ function pickerHtml(){
     h+='<div class="row" style="'+(dis?'opacity:.35;':'cursor:pointer;')+'" '+(dis?'':'onclick="addPick(\''+esc(x.n)+'\')"')+'><span class="tc" style="background:'+(TEAMCOL[x.t]||'#888')+'22;color:'+(TEAMCOL[x.t]||'#aaa')+';">'+x.t+'</span><span class="pn">'+x.n+'<small>&pound;'+PRICE[x.n].toFixed(1)+'m'+(capOk?'':' &middot; club full')+(afford?'':' &middot; too dear')+'</small></span><span class="val" style="color:var(--a);font-weight:700;">'+metaOf(x.n)+'</span></div>';
   });
   return h+'</div>';
+}
+// ---- Best Picks (phase 6): the decision engine ----
+let bpSource="K";
+function ceilingOf(x){return x.pp*fxMult(x.t)*(statusOf(x.n)===2?0:1);}
+function pickRow(x,extra,click){
+  const c=confidenceOf(x);
+  return '<div class="row"'+(click?' style="cursor:pointer;" onclick="'+click+'"':'')+'><span class="tc" style="background:'+(TEAMCOL[x.t]||"#888")+'22;color:'+(TEAMCOL[x.t]||"#aaa")+';">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+(extra?' &middot; '+extra:'')+'</small></span><span class="conf" style="background:'+c.col+'1f;color:'+c.col+';">'+c.pct+'%</span><span class="val">'+predPts(x).toFixed(1)+'</span></div>';
+}
+function bestPicksView(){
+  if(!LIVEOK)return '<div class="card"><div class="lbl">Needs live data</div><div style="font-size:13px;">Best Picks uses live prices, form and team news. '+(liveTries>3?"Tap a tab to retry.":"Connecting&hellip;")+'</div></div>';
+  const squadNames=bpSource==="B"?squadFlat():P.filter(x=>x.o===bpSource).map(x=>x.n);
+  const squad=squadNames.map(n=>P.find(y=>y.n===n)).filter(Boolean);
+  let h='<div class="note"><b>What should I actually do?</b> One screen, six decisions, every one with a confidence percentage and a reason. Confidence is how much the model trusts its own number, not how good the player is: it comes from minutes certainty, whether the signals agree, and how much data exists yet.</div>';
+  h+='<select onchange="bpSource=this.value;render()">'+[["K","Kevin\'s squad"],["L","Leo\'s squad"],["J","James\'s squad"],["B","My built squad"]].map(o=>'<option value="'+o[0]+'"'+(bpSource===o[0]?" selected":"")+'>'+o[1]+'</option>').join("")+'</select>';
+  if(!squad.length)return h+'<div class="card"><div style="font-size:13px;">That squad is empty. Build one on the Builder tab first.</div></div>';
+  const capt=squad.slice().sort((a,b)=>predPts(b)-predPts(a)).slice(0,3);
+  h+='<div class="card"><div class="lbl">&#128081; Captain</div>';
+  capt.forEach((x,i)=>{h+=pickRow(x,i===0?'ceiling '+ceilingOf(x).toFixed(1)+' pts':null,"CMP=['"+esc(x.n)+"'];findAlternatives();tab='compare';render()")});
+  if(capt.length){const c=confidenceOf(capt[0]);
+    h+='<div style="font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6;"><b style="color:'+c.col+'">'+c.band+' confidence ('+c.pct+'%)</b>'+(c.why.length?' &middot; '+c.why.join(", "):'')+(c.risk.length?'<br>Watch: '+c.risk.join(", "):'')+'</div>';}
+  h+='</div>';
+  const warn=squad.map(x=>({x,c:confidenceOf(x)})).filter(r=>r.c.pct<60||statusOf(r.x.n)>0).sort((a,b)=>a.c.pct-b.c.pct);
+  h+='<div class="card"><div class="lbl">&#9888; Warnings</div>';
+  if(!warn.length)h+='<div style="font-size:12.5px;color:var(--sub);">Nothing flagged. Every player is expected to start with the signals agreeing.</div>';
+  warn.slice(0,5).forEach(r=>{h+=pickRow(r.x,r.c.risk[0]||r.c.band.toLowerCase()+" confidence")});
+  h+='</div>';
+  const owned=new Set(squadNames);
+  const targets=poolPlayers().filter(x=>!owned.has(x.n)&&(bpSource==="B"||x.o==="F")).sort((a,b)=>metaOf(b.n)-metaOf(a.n)).slice(0,5);
+  const weakest=squad.slice().sort((a,b)=>metaOf(a.n)-metaOf(b.n))[0];
+  h+='<div class="card"><div class="lbl">&#128260; Best transfer in</div>';
+  targets.forEach(x=>{h+=pickRow(x,"Meta "+metaOf(x.n),"CMP=['"+esc(x.n)+"','"+esc(weakest?weakest.n:x.n)+"'];tab='compare';render()")});
+  if(weakest)h+='<div style="font-size:12px;color:var(--sub);margin-top:6px;">Your weakest is <b>'+weakest.n+'</b> (Meta '+metaOf(weakest.n)+'). Tap any target to compare them side by side.</div>';
+  h+='</div>';
+  const diff=poolPlayers().filter(x=>(OWN[x.n]||0)<10&&startProb(x)>=75).sort((a,b)=>metaOf(b.n)-metaOf(a.n)).slice(0,4);
+  h+='<div class="card"><div class="lbl">&#128142; Best differentials <span style="text-transform:none;letter-spacing:0;">(under 10% owned)</span></div>';
+  diff.forEach(x=>{h+=pickRow(x,(OWN[x.n]||0).toFixed(1)+"% owned &middot; Meta "+metaOf(x.n))});
+  h+='</div>';
+  h+='<div class="card"><div class="lbl">&#11088; Best in each position</div>';
+  ["G","D","M","F"].forEach(pos=>{
+    const best=poolPlayers().filter(x=>x.p===pos).sort((a,b)=>predPts(b)-predPts(a))[0];
+    if(best)h+=pickRow(best,POSNAME[pos]);
+  });
+  h+='</div>';
+  const g0=META.gw||1;
+  const runs=Object.keys(TEAMCOL).map(t=>{let s=0,n=0;for(let g=g0;g<Math.min(39,g0+5);g++){s+=fxMult(t,g);n++;}return {t,avg:s/n};}).sort((a,b)=>b.avg-a.avg);
+  h+='<div class="card"><div class="lbl">&#128197; Best fixture runs &middot; next 5</div>';
+  runs.slice(0,4).forEach((r,i)=>{h+='<div class="row"><span class="rk">'+(i+1)+'</span><span class="tc" style="background:'+TEAMCOL[r.t]+'22;color:'+TEAMCOL[r.t]+';">'+r.t+'</span><span class="pn" style="color:var(--sub);font-size:12.5px;">'+(r.avg>=1.2?"excellent run":r.avg>=1.05?"strong run":"decent run")+'</span><span class="val">'+r.avg.toFixed(2)+'</span></div>';});
+  h+='</div>';
+  return h;
+}
+// ---- Player Comparison (phase 6, Leo's spec) ----
+let CMP=[],cmpQ="",cmpPick=false;
+function cmpAdd(n){if(CMP.length<4&&!CMP.includes(n))CMP.push(n);cmpPick=false;cmpQ="";render();}
+function cmpClear(){CMP=[];render();}
+function findAlternatives(){
+  if(CMP.length!==1)return;
+  const x=P.find(y=>y.n===CMP[0]);if(!x)return;
+  const price=PRICE[x.n]||99;
+  poolPlayers().filter(y=>y.p===x.p&&y.n!==x.n&&(PRICE[y.n]||99)<=price+0.5)
+    .sort((a,b)=>metaOf(b.n)-metaOf(a.n)).slice(0,3).forEach(y=>{if(CMP.length<4)CMP.push(y.n)});
+}
+function cmpWhy(a,b){
+  const pa=metaParts(a),pb=metaParts(b);
+  const d=pa.parts.map((c,i)=>({k:c[0].toLowerCase(),d:(c[2]===null?0:c[2])-(pb.parts[i][2]===null?0:pb.parts[i][2])}));
+  const up=d.filter(z=>z.d>4).sort((x,y)=>y.d-x.d).slice(0,2).map(z=>z.k);
+  const dn=d.filter(z=>z.d<-4).sort((x,y)=>x.d-y.d).slice(0,1).map(z=>z.k);
+  let s=a.n+' rates higher';
+  if(up.length)s+=' on '+up.join(' and ');
+  s+='. ';
+  if(dn.length)s+=b.n+' wins on '+dn[0]+', so if that matters most to you the call flips.';
+  else s+=b.n+' does not clearly beat him anywhere, so this is a straight upgrade.';
+  return s;
+}
+function compareView(){
+  if(!LIVEOK)return '<div class="card"><div class="lbl">Needs live data</div><div style="font-size:13px;">Comparison uses live prices and form. '+(liveTries>3?"Tap a tab to retry.":"Connecting&hellip;")+'</div></div>';
+  let h='<div class="note"><b>Who should I buy?</b> Put any two to four players side by side, see who wins each category, and read why in one sentence.</div>';
+  h+='<div class="card"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">';
+  CMP.forEach(n=>{h+='<span class="chip" onclick="CMP=CMP.filter(x=>x!==\''+esc(n)+'\');render()">'+n+' &times;</span>';});
+  if(CMP.length<4)h+='<button onclick="cmpPick=true;cmpQ=\'\';render()" style="background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;">+ Add player</button>';
+  if(CMP.length===1)h+='<button onclick="findAlternatives();render()" style="background:transparent;border:1px solid var(--a);color:var(--a);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;">Find alternatives</button>';
+  if(CMP.length)h+='<button onclick="cmpClear()" style="background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:6px 10px;font-size:12px;">Clear</button>';
+  h+='</div>';
+  if(cmpPick){
+    h+='<input type="text" id="cq" placeholder="Search a player" value="'+cmpQ+'" style="margin-top:8px;" oninput="cmpQ=this.value;render();const e=document.getElementById(\'cq\');e.focus();e.setSelectionRange(e.value.length,e.value.length);">';
+    poolPlayers().filter(x=>!CMP.includes(x.n)&&(cmpQ===""||x.n.toLowerCase().includes(cmpQ.toLowerCase())||x.t.toLowerCase().includes(cmpQ.toLowerCase()))).sort((a,b)=>metaOf(b.n)-metaOf(a.n)).slice(0,12).forEach(x=>{
+      h+='<div class="row" style="cursor:pointer;" onclick="cmpAdd(\''+esc(x.n)+'\')"><span class="tc" style="background:'+(TEAMCOL[x.t]||"#888")+'22;color:'+(TEAMCOL[x.t]||"#aaa")+';">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+' &middot; &pound;'+(PRICE[x.n]||0).toFixed(1)+'m</small></span><span class="val" style="color:var(--a);font-weight:700;">'+metaOf(x.n)+'</span></div>';});
+  }
+  h+='</div>';
+  if(CMP.length<2)return h+'<div class="card"><div style="font-size:13px;color:var(--sub);">Add at least two players to compare. Tip: add one and tap <b>Find alternatives</b> to line him up against the best players you could swap him for.</div></div>';
+  const ps=CMP.map(n=>P.find(y=>y.n===n)).filter(Boolean);
+  const mp=ps.map(x=>metaParts(x));
+  h+='<div class="card"><div class="lbl">Overall Meta</div>';
+  const maxM=Math.max.apply(null,mp.map(m=>m.total));
+  ps.forEach((x,i)=>{h+='<div style="margin-bottom:7px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;"><span>'+x.n+' <span style="color:var(--sub);">&pound;'+(PRICE[x.n]||0).toFixed(1)+'m</span></span><span style="font-weight:700;color:var(--a);">'+mp[i].total+'</span></div><div class="bar"><i style="width:'+(mp[i].total/Math.max(maxM,1)*100)+'%;"></i></div></div>';});
+  h+='</div>';
+  h+='<div class="card"><div class="lbl">Category by category</div>';
+  h+='<div class="crow" style="color:var(--sub);font-size:11px;"><span class="ck"></span>'+ps.map(x=>'<span class="cv">'+x.n.split(" ").slice(-1)[0]+'</span>').join("")+'</div>';
+  const wins=ps.map(()=>0);
+  mp[0].parts.forEach((c,ci)=>{
+    const vals=mp.map(m=>m.parts[ci][2]);
+    const best=Math.max.apply(null,vals.map(v=>v===null?-1:v));
+    if(best>=0)vals.forEach((v,i)=>{if(v===best)wins[i]++;});
+    h+='<div class="crow"><span class="ck">'+c[0]+'</span>'+vals.map(v=>'<span class="cv"'+(v!==null&&v===best?' style="color:var(--a);font-weight:700;"':'')+'>'+(v===null?"&mdash;":Math.round(v))+'</span>').join("")+'</div>';
+  });
+  h+='<div class="crow" style="border-top:1px solid var(--line);font-weight:700;"><span class="ck">Confidence</span>'+ps.map(x=>{const c=confidenceOf(x);return '<span class="cv" style="color:'+c.col+';">'+c.pct+'%</span>';}).join("")+'</div>';
+  h+='</div>';
+  const order=ps.map((x,i)=>({x,i,m:mp[i].total})).sort((a,b)=>b.m-a.m);
+  const win=order[0],second=order[1];
+  const bestOf=(fn)=>ps.map((x,i)=>({x,v:fn(x,mp[i])})).sort((a,b)=>b.v-a.v)[0].x.n;
+  h+='<div class="card"><div class="lbl">&#127942; Verdict</div>';
+  const otherWins=wins.filter((w,i)=>i!==win.i).reduce((a,b)=>a+b,0);
+  const margin=win.m-second.m;
+  h+='<div style="font-size:14px;font-weight:700;margin-bottom:2px;">'+win.x.n+(margin>=5?' wins it':margin>=2?' edges it':' shades it')+' &middot; Meta '+win.m+' v '+second.m+'</div>';
+  h+='<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">Categories won: '+win.x.n.split(" ").slice(-1)[0]+' '+wins[win.i]+', '+(ps.length===2?second.x.n.split(" ").slice(-1)[0]+' '+otherWins:'others '+otherWins)+(wins[win.i]===otherWins?' &middot; level on categories, so Meta decides it':'')+'</div>';
+  h+='<div style="font-size:12.5px;line-height:1.9;">';
+  h+='<div>&#129351; Best overall: <b>'+win.x.n+'</b></div>';
+  h+='<div>&#128176; Best value: <b>'+bestOf(function(x,m){return m.parts[4][2]===null?-1:m.parts[4][2];})+'</b></div>';
+  h+='<div>&#128197; Best fixtures: <b>'+bestOf(function(x,m){return m.parts[2][2];})+'</b></div>';
+  h+='<div>&#128142; Best differential: <b>'+ps.slice().sort((a,b)=>(OWN[a.n]||0)-(OWN[b.n]||0))[0].n+'</b></div>';
+  h+='<div>&#128737; Safest pick: <b>'+ps.slice().sort((a,b)=>confidenceOf(b).pct-confidenceOf(a).pct)[0].n+'</b></div>';
+  h+='</div>';
+  h+='<div style="font-size:12.5px;color:var(--sub);margin-top:8px;line-height:1.6;border-top:1px solid var(--line);padding-top:7px;"><b style="color:var(--txt);">Why?</b> '+cmpWhy(win.x,second.x)+'</div>';
+  h+='</div>';
+  return h;
 }
 function accuracyView(){
   if(ACC.list===null&&!ACC.loading)setTimeout(loadAccuracy,0);
@@ -447,13 +613,18 @@ function plannerView(){
     rows+='<div style="display:flex;justify-content:space-between;"><span>Availability</span><span>&times;'+f.avail.toFixed(2)+'</span></div>';
     if(f.mom!==1)rows+='<div style="display:flex;justify-content:space-between;"><span>Momentum</span><span>&times;'+f.mom.toFixed(2)+'</span></div>';
     rows+='<div style="display:flex;justify-content:space-between;font-weight:700;color:var(--txt);border-top:1px solid var(--line);padding-top:4px;margin-top:2px;"><span>Predicted</span><span>'+f.pred.toFixed(1)+' pts</span></div>';
+    const cc=confidenceOf(x);
+    rows+='<div style="margin-top:5px;color:'+cc.col+';font-weight:700;">'+cc.band+' confidence &middot; '+cc.pct+'%</div>';
+    if(cc.why.length)rows+='<div>Because '+cc.why.join(", ")+'.</div>';
+    if(cc.risk.length)rows+='<div>Watch: '+cc.risk.join(", ")+'.</div>';
     return '<div style="font-size:11.5px;color:var(--sub);padding:6px 4px 8px 34px;border-bottom:1px solid var(--line);line-height:1.8;">'+rows+'</div>';
   }
   function prow(x,strong){
     const inj=statusOf(x.n);const mo=MOM[x.n]||0;
     const ch=CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'';
+    const cf=confChip(x);
     const moChip=mo?'<span style="font-size:10px;font-weight:700;color:'+(mo>0?'var(--a)':'#e08a76')+';flex-shrink:0;">'+(mo>0?'&#9650;':'&#9660;')+Math.abs(mo)+'</span>':'';
-    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn" style="cursor:pointer;" onclick="expanded=expanded===\''+esc(x.n)+'\'?null:\''+esc(x.n)+'\';render()">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span>'+ch+moChip+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'#e08a76':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>'+(expanded===x.n?factorsHtml(x):'');
+    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn" style="cursor:pointer;" onclick="expanded=expanded===\''+esc(x.n)+'\'?null:\''+esc(x.n)+'\';render()">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span>'+ch+moChip+cf+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'#e08a76':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>'+(expanded===x.n?factorsHtml(x):'');
   }
   h+='<div class="card"><div class="lbl">Recommended XI &middot; Gameweek '+gwSel+' &middot; predicted points &middot; tap a name for why</div>';
   xi.sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.e-a.e).forEach(x=>{h+=prow(x)});
