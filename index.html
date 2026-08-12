@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FPL Season HQ · Kevin v Leo v James</title>
 <style>
-:root{--bg:#101418;--card:#1a2026;--card2:#20272e;--line:#2b333c;--txt:#e8ebee;--sub:#8b96a0;--kev:#4cc38a;--leo:#5aa9f0;--jam:#e0a84c;--a:#4cc38a;--b:#5aa9f0;--c:#6b7680;--warn:#e0a84c;}
+:root{--bg:#101418;/*club chips use TEAMCOL in script*/--card:#1a2026;--card2:#20272e;--line:#2b333c;--txt:#e8ebee;--sub:#8b96a0;--kev:#4cc38a;--leo:#5aa9f0;--jam:#e0a84c;--a:#4cc38a;--b:#5aa9f0;--c:#6b7680;--warn:#e0a84c;}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:15px;padding:12px;max-width:600px;margin:0 auto;}
 h1{font-size:17px;font-weight:600;margin-bottom:10px;}
@@ -21,6 +21,7 @@ h1{font-size:17px;font-weight:600;margin-bottom:10px;}
 .gr.A{background:rgba(76,195,138,.15);color:var(--a);}
 .gr.B{background:rgba(90,169,240,.15);color:var(--b);}
 .gr.C{background:rgba(107,118,128,.2);color:var(--c);}
+.tc{font-size:10px;font-weight:700;border-radius:6px;padding:2px 5px;flex-shrink:0;}
 .pn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pn small{color:var(--sub);font-size:11px;margin-left:4px;}
 .val{font-size:12.5px;color:var(--sub);flex-shrink:0;width:44px;text-align:right;}
@@ -54,6 +55,7 @@ select{background:var(--card2);border:1px solid var(--line);color:var(--txt);bor
 </head>
 <body>
 <h1>FPL Season HQ &middot; 2026/27</h1>
+<div id="liveStrip" style="font-size:11.5px;margin-bottom:8px;color:var(--sub);">Loading live data&hellip;</div>
 <a href="how-it-works.html" style="display:block;background:var(--card);border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;text-align:center;text-decoration:none;margin-bottom:10px;">New here? Read how this works &rarr;</a>
 <div class="tabs">
   <button data-t="squads" class="on">Squads</button>
@@ -127,6 +129,7 @@ const FPLID={"Bruno Fernandes":426,"Erling Haaland":411,"Morgan Gibbs-White":480
 let LIVESTAT={},CHANCE={},PRICE={},LIVEFX=null,LIVEOK=false,DEADLINE="";
 function fdrMult(d){return {1:1.35,2:1.25,3:1.0,4:0.8,5:0.6}[d]||1;}
 async function loadLive(){
+  lastLoad=Date.now();
   try{
     const [bs,fx]=await Promise.all([
       fetch(RELAY+"/bootstrap").then(r=>r.json()),
@@ -159,6 +162,13 @@ async function loadLive(){
   render();
 }
 function statusOf(n){return INJ[n]!==undefined?INJ[n]:(LIVESTAT[n]!==undefined?LIVESTAT[n]:0)}
+function updateStrip(){
+  const el=document.getElementById("liveStrip");if(!el)return;
+  if(LIVEOK)el.innerHTML='<span style="color:var(--a);font-weight:600;">&#9679; Live</span> &middot; GW'+META.gw+' &middot; '+META.date+' &middot; updated '+META.updated.replace("live feed, ","");
+  else el.innerHTML='<span style="color:var(--warn);font-weight:600;">&#9675; Stored data</span> &middot; GW'+META.gw+' &middot; reopen or refresh to go live';
+}
+let lastLoad=0;
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&Date.now()-lastLoad>300000)loadLive();});
 function applyPack(txt){
   try{
     const j=JSON.parse(txt.replace(/```json|```/g,"").trim());
@@ -189,6 +199,7 @@ const GWNOTES=[
 ["GW3","City home to Coventry: near-zero-chance away trip for Coventry. Haaland captain window two."],
 ["GW4","Manchester derby: bench or expect little from Utd assets. Chelsea's best matchup of the run: Palmer's week. Sunderland's collapse begins at Arsenal."],
 ["GW5","City home to Sunderland: Haaland window three. Forest home to Coventry: Gibbs-White's best week. Hull still winless on fixtures."]];
+const TEAMCOL={MCI:"#6CABDD",ARS:"#EF4135",LIV:"#C8102E",MUN:"#DA291C",CHE:"#4D7BD6",TOT:"#8CA6C0",NEW:"#9BA7B2",AVL:"#95BFE5",BHA:"#4B9AE0",BOU:"#DA291C",BRE:"#E30613",CRY:"#4B71C9",EVE:"#5B8DDB",FUL:"#B8B8B8",LEE:"#FFCD00",NFO:"#DD3333",SUN:"#EB4B5F",COV:"#78D0F3",HUL:"#F5971D",IPS:"#5A84C4"};
 const NAMES={K:"Kevin",L:"Leo",J:"James",F:"Free"};
 const ORDER={F:1,M:2,D:3,G:4};
 const POSNAME={F:"FW",M:"MID",D:"DEF",G:"GK"};
@@ -206,9 +217,10 @@ function fxOf(t){
   const f=FIX.find(x=>x[0]===t);return f?f[1]:3;
 }
 function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
-let tab="squads",posF="ALL",ownF="ALL",q="";
+let tab="squads",posF="ALL",ownF="ALL",q="",sortMode="val";
 function esc(s){return s.replace(/'/g,"\\'")}
 function render(){
+  updateStrip();
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
   const v=document.getElementById("view");
   if(tab==="squads")return v.innerHTML=squadsView();
@@ -228,13 +240,21 @@ function squadsView(){
   return h;
 }
 function rowHtml(x,showOwner){
-  return '<div class="row"><span class="rk">'+x.r+'</span><span class="gr '+x.g+'">'+x.g+'</span><span class="pn">'+x.n+'<small>'+x.t+' '+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span><span class="val">'+x.v+' &middot; '+x.pp.toFixed(1)+'</span>'+(showOwner?'<span class="own '+x.o+'">'+(x.o==="F"?"Free":NAMES[x.o])+'</span>':'')+'</div>';
+  const st=statusOf(x.n);
+  const flag=st===2?'<span style="font-size:10px;font-weight:700;color:#e08a76;flex-shrink:0;">OUT</span>':(CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'');
+  const club=showOwner?'<span class="tc" style="background:'+(TEAMCOL[x.t]||'#888')+'22;color:'+(TEAMCOL[x.t]||'#aaa')+';">'+x.t+'</span>':'';
+  const small=(showOwner?'':x.t+' ')+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'');
+  return '<div class="row"><span class="rk">'+x.r+'</span><span class="gr '+x.g+'">'+x.g+'</span>'+club+'<span class="pn">'+x.n+'<small>'+small+'</small></span>'+flag+'<span class="val">'+x.v+' &middot; '+x.pp.toFixed(1)+'</span>'+(showOwner?'<span class="own '+x.o+'">'+(x.o==="F"?"Free":NAMES[x.o])+'</span>':'')+'</div>';
 }
 function playersView(){
   let h='<input type="text" id="srch" placeholder="Search player or team" value="'+q+'" oninput="q=this.value;render();document.getElementById(\'srch\').focus();const el=document.getElementById(\'srch\');el.setSelectionRange(el.value.length,el.value.length);">';
   h+='<div class="filters">'+["ALL","F","M","D","G"].map(p=>'<button onclick="posF=\''+p+'\';render()" class="'+(posF===p?"on":"")+'">'+(p==="ALL"?"All":POSNAME[p])+'</button>').join("")+'<button onclick="ownF=ownF===\'F\'?\'ALL\':\'F\';render()" class="'+(ownF==="F"?"on":"")+'">Free only</button></div>';
-  h+='<div class="note">Score column: season points index &middot; points per 90. Grades are system bands per position. '+P.length+' players covered; anything below this list is sub-viable filler in a 3-manager league.</div>';
+  h+='<div class="filters">'+[["val","Score"],["price","Price"],["vpm","&pound; value"],["pp","PP/90"],["start","Start %"]].map(s=>'<button onclick="sortMode=\''+s[0]+'\';render()" class="'+(sortMode===s[0]?"on":"")+'">'+s[1]+'</button>').join("")+'</div>';
+  h+='<div class="note">Score column: draft value &middot; points per 90. Prices and injury flags are live from the official feed. Sort by Score, Price, &pound; value (value per million), PP/90 or Start %. '+P.length+' players covered.</div>';
   let rows=P.filter(x=>(posF==="ALL"||x.p===posF)&&(ownF==="ALL"||x.o==="F")&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
+  const startP=x=>{const s=statusOf(x.n);return s===2?0:(CHANCE[x.n]!=null?CHANCE[x.n]:(s===1?50:100));};
+  const sortKey={val:x=>x.v,price:x=>PRICE[x.n]||0,vpm:x=>PRICE[x.n]?x.v/PRICE[x.n]:0,pp:x=>x.pp,start:x=>startP(x)}[sortMode];
+  rows=rows.slice().sort((a,b)=>sortKey(b)-sortKey(a)||b.v-a.v);
   if(posF==="ALL"){rows.slice(0,260).forEach(x=>h+=rowHtml(x,true));}
   else{rows.forEach(x=>h+=rowHtml(x,true));}
   return h;
