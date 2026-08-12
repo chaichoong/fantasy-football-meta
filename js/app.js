@@ -1,0 +1,226 @@
+// Per-GW team fixture modifiers, GW1-5, from the fixture model notes (approximate where the model gave only a run-level read)
+const MOD={MCI:[1.3,1.0,1.3,0.9,1.3],ARS:[1.25,1.1,1.1,1.1,1.1],LIV:[0.9,1.1,1.1,1.1,1.1],MUN:[1.3,1.3,1.0,0.6,1.0],CHE:[1.0,1.0,1.0,1.35,1.0],NFO:[1.1,1.1,1.1,1.0,1.35],SUN:[1.1,1.1,1.0,0.6,0.6],BOU:[0.6,0.9,1.0,1.0,1.0],HUL:[0.6,0.8,0.8,0.8,0.8],COV:[0.9,0.9,0.55,0.9,0.6],IPS:[0.85,0.6,0.85,0.85,0.85]};
+// Injury status: 0 fit, 1 doubt, 2 out. Preset from verified news; everything else assumed fit until you update it.
+let INJ={}; // manual overrides only; live feed supplies availability, overrides win while set
+let MOM={}; // momentum: -2 cold .. +2 hot, applied as 0.8x to 1.2x
+let FXW={}; // current-gameweek fixture ratings per team (1-5), from refresh; overrides MOD beyond GW5
+let META={gw:1,date:"pre-season",updated:"draft data, 8 Aug 2026"};
+try{INJ=Object.assign(INJ,JSON.parse(localStorage.getItem("fplHQinj")||"{}"))}catch(e){}
+try{MOM=JSON.parse(localStorage.getItem("fplHQmom")||"{}")}catch(e){}
+try{FXW=JSON.parse(localStorage.getItem("fplHQfxw")||"{}")}catch(e){}
+try{const m=JSON.parse(localStorage.getItem("fplHQmeta")||"null");if(m)META=m;}catch(e){}
+function saveInj(){try{localStorage.setItem("fplHQinj",JSON.stringify(INJ));localStorage.setItem("fplHQmom",JSON.stringify(MOM));localStorage.setItem("fplHQfxw",JSON.stringify(FXW));localStorage.setItem("fplHQmeta",JSON.stringify(META))}catch(e){}}
+// ---- Live data (phase 1) ----
+// Official FPL feed via our relay (the API blocks browsers directly; the relay adds CORS + 15-min cache).
+const RELAY="https://fpl-relay.kevinbrittain.workers.dev";
+
+let LIVESTAT={},CHANCE={},PRICE={},LIVEFX=null,LIVEOK=false,DEADLINE="";
+function fdrMult(d){return {1:1.35,2:1.25,3:1.0,4:0.8,5:0.6}[d]||1;}
+async function loadLive(){
+  lastLoad=Date.now();
+  try{
+    const [bs,fx]=await Promise.all([
+      fetch(RELAY+"/bootstrap").then(r=>r.json()),
+      fetch(RELAY+"/fixtures").then(r=>r.json())
+    ]);
+    const byId={};bs.elements.forEach(e=>byId[e.id]=e);
+    const short={};bs.teams.forEach(t=>short[t.id]=t.short_name);
+    LIVESTAT={};CHANCE={};PRICE={};
+    P.forEach(x=>{
+      const e=byId[FPLID[x.n]];if(!e)return;
+      PRICE[x.n]=e.now_cost/10;
+      LIVESTAT[x.n]=e.status==="a"?0:e.status==="d"?1:2;
+      if(e.chance_of_playing_next_round!=null&&e.chance_of_playing_next_round<100)CHANCE[x.n]=e.chance_of_playing_next_round;
+    });
+    LIVEFX={};
+    fx.forEach(f=>{
+      if(!f.event)return; // unscheduled fixture: ignore until it gets a gameweek
+      const h=short[f.team_h],a=short[f.team_a];
+      (LIVEFX[h]=LIVEFX[h]||{})[f.event]=(LIVEFX[h][f.event]||0)+fdrMult(f.team_h_difficulty);
+      (LIVEFX[a]=LIVEFX[a]||{})[f.event]=(LIVEFX[a][f.event]||0)+fdrMult(f.team_a_difficulty);
+    });
+    const next=bs.events.find(e=>e.is_next)||bs.events.find(e=>e.is_current)||bs.events[0];
+    META.gw=next.id;
+    DEADLINE=new Date(next.deadline_time).toLocaleString("en-GB",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+    META.date=next.is_current?"in play":"deadline "+DEADLINE;
+    META.updated="live feed, "+new Date().toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+    if(gwSel<META.gw||gwSel>META.gw+3)gwSel=META.gw;
+    LIVEOK=true;liveTries=0;saveInj();
+  }catch(e){
+    LIVEOK=false;
+    if(++liveTries<=3)setTimeout(loadLive,liveTries*2500); // self-heal: retry at 2.5s, 5s, 7.5s
+  }
+  render();
+}
+function statusOf(n){return INJ[n]!==undefined?INJ[n]:(LIVESTAT[n]!==undefined?LIVESTAT[n]:0)}
+function updateStrip(){
+  const el=document.getElementById("liveStrip");if(!el)return;
+  if(LIVEOK)el.innerHTML='<span style="color:var(--a);font-weight:600;">&#9679; Live</span> &middot; GW'+META.gw+' &middot; '+META.date+' &middot; updated '+META.updated.replace("live feed, ","");
+  else el.innerHTML='<span style="color:var(--warn);font-weight:600;">&#9675; '+(liveTries>0&&liveTries<=3?'Connecting&hellip;':'Stored data')+'</span> &middot; GW'+META.gw+(liveTries>3?' &middot; refresh to retry':'');
+}
+let lastLoad=0,liveTries=0;
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&Date.now()-lastLoad>300000)loadLive();});
+function applyPack(txt){
+  try{
+    const j=JSON.parse(txt.replace(/```json|```/g,"").trim());
+    if(j.gameweek){META.gw=j.gameweek;gwSel=j.gameweek;}
+    if(j.date)META.date=j.date;
+    META.updated=new Date().toLocaleDateString("en-GB");
+    (j.players||[]).forEach(p=>{
+      const s=p.status==="out"?2:p.status==="doubt"?1:0;
+      if(s)INJ[p.name]=s;else delete INJ[p.name];
+      if(typeof p.momentum==="number")MOM[p.name]=Math.max(-2,Math.min(2,p.momentum));
+    });
+    (j.teams||[]).forEach(t=>{FXW[t.code]=Math.max(1,Math.min(5,t.fx))});
+    saveInj();render();
+    return true;
+  }catch(e){alert("Pack not valid JSON. Copy the whole code block from chat and paste again.");return false;}
+}
+async function refreshLive(){
+  const btn=document.getElementById("refBtn");
+  if(btn){btn.textContent="Refreshing...";btn.disabled=true;}
+  await loadLive();
+  if(btn){btn.textContent="Refresh live data";btn.disabled=false;}
+}
+// Team early-run fixture ratings GW1-5 (rank + read, model dated 5 Aug 2026)
+const FIX=[["MCI",5,"Elite. Two 80%+ home games, nothing scary"],["ARS",5,"Elite. 80%+ opener, strong throughout"],["LIV",4,"Strong and steady, no trap week"],["MUN",4,"Fast start, then City in GW4"],["NFO",4,"Value team with the schedule, three strong home games"],["CHE",3,"Lumpy, one huge week in GW4"],["NEW",3,"Backloaded"],["EVE",3,"Backloaded"],["BRE",3,"Decent, home-heavy"],["AVL",3,"Middling"],["BHA",3,"Middling, tough finish"],["TOT",3,"Middling"],["CRY",3,"Slow start"],["FUL",3,"Middling"],["BOU",2,"Brutal opener, then fine"],["LEE",2,"Below average"],["SUN",2,"Opens fine, Arsenal then City GW4-5"],["COV",2,"Two wipeouts: away Arsenal and City"],["IPS",1,"Rough throughout"],["HUL",1,"Worst in the league. Home games are MUN and AVL"]];
+const GWNOTES=[
+["GW1 (23 Aug)","City home to Bournemouth: Haaland's first big window. Liverpool away at Newcastle. Utd open with Hull."],
+["GW2","Utd v Ipswich: Bruno and Mbeumo's best early week. Bournemouth's brutal opener continues."],
+["GW3","City home to Coventry: near-zero-chance away trip for Coventry. Haaland captain window two."],
+["GW4","Manchester derby: bench or expect little from Utd assets. Chelsea's best matchup of the run: Palmer's week. Sunderland's collapse begins at Arsenal."],
+["GW5","City home to Sunderland: Haaland window three. Forest home to Coventry: Gibbs-White's best week. Hull still winless on fixtures."]];
+const TEAMCOL={MCI:"#6CABDD",ARS:"#EF4135",LIV:"#C8102E",MUN:"#DA291C",CHE:"#4D7BD6",TOT:"#8CA6C0",NEW:"#9BA7B2",AVL:"#95BFE5",BHA:"#4B9AE0",BOU:"#DA291C",BRE:"#E30613",CRY:"#4B71C9",EVE:"#5B8DDB",FUL:"#B8B8B8",LEE:"#FFCD00",NFO:"#DD3333",SUN:"#EB4B5F",COV:"#78D0F3",HUL:"#F5971D",IPS:"#5A84C4"};
+const NAMES={K:"Kevin",L:"Leo",J:"James",F:"Free"};
+const ORDER={F:1,M:2,D:3,G:4};
+const POSNAME={F:"FW",M:"MID",D:"DEF",G:"GK"};
+// System grade from season points index, per position bands (free agents only; drafted players keep curated grades)
+function grade(p,pts){
+  if(p==="M")return pts>=180?"A":pts>=120?"B":"C";
+  if(p==="F")return pts>=140?"A":pts>=100?"B":"C";
+  if(p==="D")return pts>=160?"A":pts>=115?"B":"C";
+  return pts>=155?"A":pts>=125?"B":"C";
+}
+const P=D.map((a,i)=>({n:a[0],t:a[1],p:a[2],pts:a[3],pp:a[4],g:GRC[a[0]]||grade(a[2],a[3]),v:VAL[a[0]]!==undefined?VAL[a[0]]:Math.round(a[3]/2.2),o:OWNER[a[0]]||"F",gw:GW[a[0]]||null}));
+P.sort((a,b)=>b.v-a.v||b.pts-a.pts);P.forEach((x,i)=>x.r=i+1);
+function fxOf(t){
+  if(LIVEFX&&LIVEFX[t]){const m=LIVEFX[t][gwSel]||0;return m>=1.25?5:m>=1.1?4:m>=0.95?3:m>=0.75?2:1;}
+  const f=FIX.find(x=>x[0]===t);return f?f[1]:3;
+}
+function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
+let tab="squads",posF="ALL",ownF="ALL",q="",sortMode="val";
+function esc(s){return s.replace(/'/g,"\\'")}
+function render(){
+  updateStrip();
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
+  const v=document.getElementById("view");
+  if(tab==="squads")return v.innerHTML=squadsView();
+  if(tab==="players")return v.innerHTML=playersView();
+  if(tab==="fixtures")return v.innerHTML=fixturesView();
+  if(tab==="planner")return v.innerHTML=plannerView();
+}
+function squadTotal(o){return P.filter(x=>x.o===o).reduce((s,x)=>s+x.v,0)}
+function squadsView(){
+  const T=["K","J","L"].map(o=>({o,tot:squadTotal(o),n:P.filter(x=>x.o===o).length,A:P.filter(x=>x.o===o&&x.g==="A").length}));
+  let h='<div class="teams">'+T.map(t=>'<div class="team '+(t.o==="K"?"kev":t.o==="L"?"leo":"jam")+'"><div class="tn">'+NAMES[t.o]+'</div><div class="score">'+t.tot+'</div><div class="meta">'+t.n+'/15 &middot; '+t.A+' A-grade</div></div>').join("")+'</div>';
+  h+='<div class="note"><b>Kevin 1001, James 830, Leo 807.</b> One metric everywhere in this app now: the draft value score (70% projected points, 20% minutes certainty, 10% ceiling and edge). This matches draft night exactly. The raw points index still appears per player as reference only; it is one input to the score, not the score, and squad totals are never computed from it.</div>';
+  ["K","J","L"].forEach(o=>{
+    h+='<div class="sec">'+NAMES[o]+'</div>';
+    P.filter(x=>x.o===o).sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.v-a.v).forEach(x=>{h+=rowHtml(x,false)});
+  });
+  return h;
+}
+function rowHtml(x,showOwner){
+  const st=statusOf(x.n);
+  const flag=st===2?'<span style="font-size:10px;font-weight:700;color:#e08a76;flex-shrink:0;">OUT</span>':(CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'');
+  const club=showOwner?'<span class="tc" style="background:'+(TEAMCOL[x.t]||'#888')+'22;color:'+(TEAMCOL[x.t]||'#aaa')+';">'+x.t+'</span>':'';
+  const small=(showOwner?'':x.t+' ')+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'');
+  return '<div class="row"><span class="rk">'+x.r+'</span><span class="gr '+x.g+'">'+x.g+'</span>'+club+'<span class="pn">'+x.n+'<small>'+small+'</small></span>'+flag+'<span class="val">'+x.v+' &middot; '+x.pp.toFixed(1)+'</span>'+(showOwner?'<span class="own '+x.o+'">'+(x.o==="F"?"Free":NAMES[x.o])+'</span>':'')+'</div>';
+}
+function playersView(){
+  let h='<input type="text" id="srch" placeholder="Search player or team" value="'+q+'" oninput="q=this.value;render();document.getElementById(\'srch\').focus();const el=document.getElementById(\'srch\');el.setSelectionRange(el.value.length,el.value.length);">';
+  h+='<div class="filters">'+["ALL","F","M","D","G"].map(p=>'<button onclick="posF=\''+p+'\';render()" class="'+(posF===p?"on":"")+'">'+(p==="ALL"?"All":POSNAME[p])+'</button>').join("")+'<button onclick="ownF=ownF===\'F\'?\'ALL\':\'F\';render()" class="'+(ownF==="F"?"on":"")+'">Free only</button></div>';
+  h+='<div class="filters">'+[["val","Score"],["price","Price"],["vpm","&pound; value"],["pp","PP/90"],["start","Start %"]].map(s=>'<button onclick="sortMode=\''+s[0]+'\';render()" class="'+(sortMode===s[0]?"on":"")+'">'+s[1]+'</button>').join("")+'</div>';
+  h+='<div class="note">Score column: draft value &middot; points per 90. Prices and injury flags are live from the official feed. Sort by Score, Price, &pound; value (value per million), PP/90 or Start %. '+P.length+' players covered.</div>';
+  let rows=P.filter(x=>(posF==="ALL"||x.p===posF)&&(ownF==="ALL"||x.o==="F")&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
+  const startP=x=>{const s=statusOf(x.n);return s===2?0:(CHANCE[x.n]!=null?CHANCE[x.n]:(s===1?50:100));};
+  const sortKey={val:x=>x.v,price:x=>PRICE[x.n]||0,vpm:x=>PRICE[x.n]?x.v/PRICE[x.n]:0,pp:x=>x.pp,start:x=>startP(x)}[sortMode];
+  rows=rows.slice().sort((a,b)=>sortKey(b)-sortKey(a)||b.v-a.v);
+  if(posF==="ALL"){rows.slice(0,260).forEach(x=>h+=rowHtml(x,true));}
+  else{rows.forEach(x=>h+=rowHtml(x,true));}
+  return h;
+}
+function fixturesView(){
+  let h='<div class="card"><div class="lbl">Team fixture runs &middot; Gameweeks 1-5</div>';
+  FIX.forEach((f,i)=>{h+='<div class="row"><span class="rk">'+(i+1)+'</span><span class="fxbar fx'+f[1]+'">'+f[0]+'</span><span class="pn" style="white-space:normal;font-size:12.5px;color:var(--sub)">'+f[2]+'</span></div>'});
+  h+='</div>';
+  h+='<div class="card"><div class="lbl">Gameweek notes</div>';
+  GWNOTES.forEach(g=>{h+='<div style="margin-bottom:8px;"><div style="font-size:13px;font-weight:600;">'+g[0]+'</div><div style="font-size:12.5px;color:var(--sub);line-height:1.5;">'+g[1]+'</div></div>'});
+  h+='</div>';
+  h+='<div class="note">Season opener 23 August, GW1 deadline Friday 21 August. Window closes 1 September, so re-check any player in transfer talk before each of the first three deadlines. Ratings and notes from the fixture model dated 5 August; The GW Plan tab now uses live official fixture difficulty for every gameweek; this page remains the narrative read on the opening runs.</div>';
+  return h;
+}
+let planTeam="K",gwSel=META.gw||1;
+const INJLBL=["Fit","Doubt","Out"];
+function cycleInj(n){const cur=statusOf(n);const nx=(cur+1)%3;const live=LIVESTAT[n]!==undefined?LIVESTAT[n]:0;if(nx===live)delete INJ[n];else INJ[n]=nx;saveInj();render();}
+// THE single weekly number. One formula, four inputs:
+// WeekScore = draft value (quality) x fixture (this GW) x availability x momentum
+function fxMult(t){
+  if(LIVEFX&&LIVEFX[t])return LIVEFX[t][gwSel]||0; // no fixture = blank GW = 0; double GW = both games summed
+  if(gwSel<=5)return (MOD[t]||[1,1,1,1,1])[gwSel-1];
+  return FXW[t]?0.4+FXW[t]*0.2:1;
+}
+function gwScore(x){
+  const inj=statusOf(x.n);
+  if(inj===2)return 0;
+  const mom=1+(MOM[x.n]||0)*0.1;
+  return (x.v/10)*fxMult(x.t)*(inj===1?0.6:1)*mom;
+}
+function plannerView(){
+  let h='<div class="card"><div class="lbl">Data status</div><div style="font-size:13px;">Gameweek '+META.gw+' &middot; '+META.date+'</div>';
+  if(LIVEOK)h+='<div style="font-size:11.5px;color:var(--a);margin:2px 0 8px;">&#9679; Live: prices, injuries and fixture difficulty from the official FPL feed &middot; '+META.updated+'</div>';
+  else h+='<div style="font-size:11.5px;color:var(--warn);margin:2px 0 8px;">Live feed unreachable &mdash; using stored data ('+META.updated+'). Tap refresh to retry.</div>';
+  h+='<button id="refBtn" onclick="refreshLive()" style="width:100%;background:var(--card2);border:1px solid #3d4854;color:var(--txt);border-radius:8px;padding:9px 0;font-size:13px;font-weight:600;margin-bottom:6px;">Refresh live data</button>';
+  h+='<textarea id="packBox" placeholder="Optional: paste a momentum data pack from Claude chat here" style="width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:12px;height:52px;margin-bottom:6px;"></textarea>';
+  h+='<button onclick="applyPack(document.getElementById(\'packBox\').value)" style="width:100%;background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;">Apply pack</button></div>';
+  h+='<select onchange="planTeam=this.value;render()">'+["K","L","J"].map(o=>'<option value="'+o+'"'+(planTeam===o?" selected":"")+'>'+NAMES[o]+"'s plan</option>").join("")+'</select>';
+  const gws=[];for(let g=Math.max(1,META.gw-1);g<=Math.min(38,META.gw+3);g++)gws.push(g);
+  h+='<div class="filters">'+gws.map(g=>'<button onclick="gwSel='+g+';render()" class="'+(gwSel===g?"on":"")+'">GW'+g+'</button>').join("")+'</div>';
+  const mine=P.filter(x=>x.o===planTeam).map(x=>({...x,e:gwScore(x)}));
+  const gk=mine.filter(x=>x.p==="G").sort((a,b)=>b.e-a.e);
+  const out=mine.filter(x=>x.p!=="G").sort((a,b)=>b.e-a.e);
+  let xi=[gk[0]],d=0,m=0,f=0;
+  out.forEach(x=>{if(xi.length>=11)return;
+    const left=11-xi.length;const needD=Math.max(0,3-d),needM=Math.max(0,3-m),needF=Math.max(0,1-f);
+    const reserved=needD+needM+needF;
+    const isNeeded=(x.p==="D"&&needD>0)||(x.p==="M"&&needM>0)||(x.p==="F"&&needF>0);
+    if(isNeeded||left>reserved){xi.push(x);if(x.p==="D")d++;if(x.p==="M")m++;if(x.p==="F")f++;}
+  });
+  const bench=mine.filter(x=>!xi.includes(x));
+  function prow(x,strong){
+    const inj=statusOf(x.n);const mo=MOM[x.n]||0;
+    const ch=CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'';
+    const moChip=mo?'<span style="font-size:10px;font-weight:700;color:'+(mo>0?'var(--a)':'#e08a76')+';flex-shrink:0;">'+(mo>0?'&#9650;':'&#9660;')+Math.abs(mo)+'</span>':'';
+    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span>'+ch+moChip+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'#e08a76':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>';
+  }
+  h+='<div class="card"><div class="lbl">Recommended XI &middot; Gameweek '+gwSel+'</div>';
+  xi.sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.e-a.e).forEach(x=>{h+=prow(x)});
+  h+='</div><div class="card"><div class="lbl">Bench</div>';
+  bench.sort((a,b)=>b.e-a.e).forEach(x=>{h+=prow(x)});
+  h+='</div>';
+  const free=P.filter(x=>x.o==="F").map(x=>({...x,e:gwScore(x)})).sort((a,b)=>b.e-a.e);
+  h+='<div class="card"><div class="lbl">Waiver targets this gameweek</div>';
+  let shown=0;
+  free.forEach(x=>{if(shown>=10)return;
+    const weak=mine.filter(y=>y.p===x.p).sort((a,b)=>a.e-b.e)[0];
+    if(weak&&x.e>weak.e){shown++;
+      h+='<div class="row"><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+'</small></span><span class="val">'+x.e.toFixed(1)+'</span><span style="font-size:11px;color:var(--sub);flex-shrink:0;">for '+weak.n.split(" ").slice(-1)[0]+' ('+weak.e.toFixed(1)+')</span></div>';}
+  });
+  if(!shown)h+='<div class="note" style="margin:0">No free agent beats this squad this week. Hold.</div>';
+  h+='</div>';
+  h+='<div class="note"><b>One score, four inputs.</b> Week score = draft value (player quality, fixed at draft night) &times; this week\'s fixture &times; availability &times; momentum. Prices, injuries, chance-of-playing and fixture difficulty for all 38 gameweeks come from the official FPL feed, loaded on open and on refresh (the feed updates every 15 minutes). A blank gameweek scores 0; a double gameweek counts both matches. Tap any status button to override the feed; cycling back to the feed\'s value hands control back to it. Momentum still arrives via a pasted data pack. Never drop an A-grade on one bad week; momentum is a tiebreaker, not a strategy.</div>';
+  return h;
+}
+document.querySelector(".tabs").addEventListener("click",e=>{if(e.target.dataset.t){tab=e.target.dataset.t;render()}});
+render();
+loadLive();

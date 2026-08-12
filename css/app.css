@@ -1,0 +1,46 @@
+:root{--bg:#101418;/*club chips use TEAMCOL in script*/--card:#1a2026;--card2:#20272e;--line:#2b333c;--txt:#e8ebee;--sub:#8b96a0;--kev:#4cc38a;--leo:#5aa9f0;--jam:#e0a84c;--a:#4cc38a;--b:#5aa9f0;--c:#6b7680;--warn:#e0a84c;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:15px;padding:12px;max-width:600px;margin:0 auto;}
+h1{font-size:17px;font-weight:600;margin-bottom:10px;}
+.tabs{display:flex;gap:5px;margin-bottom:12px;}
+.tabs button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;}
+.tabs button.on{background:var(--card2);color:var(--txt);border-color:#3d4854;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;}
+.card .lbl{font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;}
+.sec{font-size:12px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;margin:14px 0 4px;}
+.row{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
+.rk{font-size:11.5px;color:var(--sub);width:26px;text-align:right;flex-shrink:0;}
+.gr{font-size:11px;font-weight:700;border-radius:6px;padding:2px 0;width:20px;text-align:center;flex-shrink:0;}
+.gr.A{background:rgba(76,195,138,.15);color:var(--a);}
+.gr.B{background:rgba(90,169,240,.15);color:var(--b);}
+.gr.C{background:rgba(107,118,128,.2);color:var(--c);}
+.tc{font-size:10px;font-weight:700;border-radius:6px;padding:2px 5px;flex-shrink:0;}
+.pn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pn small{color:var(--sub);font-size:11px;margin-left:4px;}
+.val{font-size:12.5px;color:var(--sub);flex-shrink:0;width:44px;text-align:right;}
+.own{font-size:10.5px;font-weight:700;border-radius:5px;padding:2px 6px;flex-shrink:0;width:34px;text-align:center;}
+.own.K{background:rgba(76,195,138,.15);color:var(--kev);}
+.own.L{background:rgba(90,169,240,.15);color:var(--leo);}
+.own.J{background:rgba(224,168,76,.15);color:var(--jam);}
+.own.F{background:transparent;color:#4a545e;border:1px solid var(--line);}
+.filters{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
+.filters button{background:var(--card);border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:600;}
+.filters button.on{background:var(--card2);color:var(--txt);border-color:#3d4854;}
+input[type=text]{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:14px;margin-bottom:8px;}
+.teams{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+.team{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;}
+.team .tn{font-size:13px;font-weight:600;}
+.team.kev{border-color:rgba(76,195,138,.5);}
+.team.kev .tn{color:var(--kev);}.team.leo .tn{color:var(--leo);}.team.jam .tn{color:var(--jam);}
+.team .score{font-size:18px;font-weight:600;}
+.team .meta{font-size:11px;color:var(--sub);line-height:1.5;}
+.note{font-size:12.5px;color:var(--sub);line-height:1.55;margin-bottom:10px;}
+.note b{color:var(--txt);}
+.fxbar{display:inline-block;width:44px;text-align:center;font-size:11px;font-weight:700;border-radius:5px;padding:2px 0;flex-shrink:0;}
+.fx5{background:rgba(76,195,138,.2);color:var(--a);}
+.fx4{background:rgba(76,195,138,.12);color:#7fd0a5;}
+.fx3{background:rgba(139,150,160,.15);color:var(--sub);}
+.fx2{background:rgba(224,168,76,.15);color:var(--warn);}
+.fx1{background:rgba(224,110,90,.18);color:#e08a76;}
+select{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:14px;margin-bottom:8px;width:100%;}
+.pill{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:11.5px;color:var(--sub);margin:2px 2px 2px 0;}
