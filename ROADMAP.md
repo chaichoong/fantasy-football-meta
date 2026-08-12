@@ -105,10 +105,35 @@ NOTE: event probabilities are deliberately NOT wired into the headline predicted
 number. Two competing points figures is exactly the metric inconsistency that burned
 Kevin in the first build — the blend stays the single source of the number.
 
-**Phase 8 — Visual redesign.** Premier League-inspired identity of our own (never copied
-branding): dashboard command-centre homepage, player cards, pitch UI. Player photos remain
-parked pending a properly licensed source; club colours and initials do the visual work
-until then.
+**Phase 8 — Visual redesign. ✅ DONE 12 Aug 2026**
+Built from Leo's mockup with two deliberate departures, both deliberate and both to be kept:
+1. **No Premier League logo or branding.** The mockup put the PL crest in the sidebar. That
+   is their trademark and this is heading for sale, so the identity is our own violet/indigo
+   palette, not the PL purple/pink/cyan set.
+2. **No player photographs.** Club-coloured initial avatars instead, until a licensed image
+   source exists (see Parked).
+Delivered: sidebar shell with 10 sections (collapses to a scrolling nav under 860px), light
+content area on dark sidebar, Dashboard home (4 hero cards, top players, 6-GW fixture
+difficulty grid, Meta donut, team news, CTAs), Team News section (availability news ranked
+above completed transfers — the feed mixes both), deadline card, and a full light-theme
+token remap. Hero card 3 adapts: biggest price riser once prices move, best value until then.
+
+**Meta v2 (same phase).** Adopted the mockup's seven factors: form 25, fixtures 20,
+underlying threat (xG/xA, or xGC for keepers/defenders) 20, minutes security 15, value 10,
+differential 5, long-term 5. Predicted points was REMOVED as a component — form, fixtures,
+threat and minutes are its own ingredients, so including it double-counted. The mockup's
+vague "other factors 5%" was given a concrete name (long-term quality). Ratings moved as a
+result; nothing in the accuracy record depends on Meta, so no history was invalidated.
+
+## Still open from Leo's mockup (not built)
+
+- **Transfers planner** and **Pro tools** — sidebar carries an honest "still being built,
+  nothing to buy yet" note rather than a dead link or a fake paywall.
+- **My Team** (link an official FPL team id and analyse it) — the feed exposes
+  `/entry/{id}/` endpoints; would need a relay route. Natural next build.
+- **Price Changes** section — the data (`cost_change_event`) is present but zero all
+  preseason, so it renders as the adaptive hero card until prices actually move.
+- **Login / accounts** — nothing built, nothing collected. Do not build a fake sign-in.
 
 ## Parked (good ideas, wrong time)
 

@@ -44,7 +44,11 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <p>It is a single web page that helps you pick your Fantasy Premier League team each week. It holds the three squads from your draft (Kevin, Leo and James), a database of around 319 players with a score on each one, how hard every club's early fixtures are, and a recommended starting eleven for any gameweek you choose.</p>
 <p>It is a helper, not a robot. It suggests. You decide, and you still set your real team in the official FPL app.</p>
 
-<h2>The eight tabs</h2>
+<h2>The Dashboard</h2>
+<p>The home screen answers the week in four cards: best captain, best differential, best value (or the biggest price riser once prices start moving), and the biggest rotation risk in your squad. Under that: the top players by Meta, a fixture-difficulty grid for the next six gameweeks, the Meta rating broken into its seven parts, and the latest injury news straight from the official feed.</p>
+<p>One thing that surprises people: the top-players list is ranked by Meta, which rewards value, fixtures and minutes as well as talent. So a cheap player with an easy run can sit above a superstar. The predicted-points column is the raw output figure if that is what you want to compare.</p>
+
+<h2>The sections</h2>
 
 <div class="card">
 <div class="lbl">Squads</div>
@@ -134,6 +138,20 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <li><b>Data completeness (20%)</b> — how many signals exist at all. Early in the season there is no form data, so everyone's confidence is honestly lower.</li>
 </ul>
 <p>The bands: <b>85% and up</b> very high, <b>70 to 84</b> high, <b>50 to 69</b> medium, <b>30 to 49</b> low, <b>under 30</b> very low. Tap a player in the GW Plan tab and it tells you the reasons behind his number and what to watch.</p>
+
+<h2>What Meta is made of</h2>
+<p>Seven factors, shown as a donut on the dashboard and broken down on every player page:</p>
+<table>
+<tr><th>Factor</th><th>Weight</th><th>What it measures</th></tr>
+<tr><td>Form</td><td>25%</td><td>How he has actually been scoring lately. Empty until matches are played.</td></tr>
+<tr><td>Fixtures</td><td>20%</td><td>How kind his next five games are.</td></tr>
+<tr><td>Underlying threat</td><td>20%</td><td>Expected goals and assists per 90 for attackers; goals conceded for defenders and keepers.</td></tr>
+<tr><td>Minutes security</td><td>15%</td><td>How likely he is to actually be on the pitch.</td></tr>
+<tr><td>Value</td><td>10%</td><td>Output per million of price.</td></tr>
+<tr><td>Differential</td><td>5%</td><td>Low ownership scores higher, because beating other managers needs players they do not have.</td></tr>
+<tr><td>Long-term quality</td><td>5%</td><td>The fixed draft-night rating.</td></tr>
+</table>
+<p>Predicted points is deliberately <b>not</b> one of the seven. Form, fixtures, threat and minutes are the ingredients of the prediction already, so counting it again would double up.</p>
 
 <h2>What A, B and C mean</h2>
 <p><span class="grade gA">A</span> Cannot be replaced. If you lose him there is nothing else like him in the pool.</p>

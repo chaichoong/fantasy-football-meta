@@ -14,7 +14,7 @@ function saveInj(){try{localStorage.setItem("fplHQinj",JSON.stringify(INJ));loca
 // Official FPL feed via our relay (the API blocks browsers directly; the relay adds CORS + 15-min cache).
 const RELAY="https://fpl-relay.kevinbrittain.workers.dev";
 
-let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},XG={},LIVEFX=null,LIVEOK=false,DEADLINE="";
+let LIVESTAT={},CHANCE={},PRICE={},LIVEEL={},OWN={},XG={},PRICEMOVE={},NEWS=[],LIVEFX=null,LIVEOK=false,DEADLINE="";
 function fdrMult(d){return {1:1.35,2:1.25,3:1.0,4:0.8,5:0.6}[d]||1;}
 async function loadLive(){
   lastLoad=Date.now();
@@ -25,7 +25,7 @@ async function loadLive(){
     ]);
     const byId={};bs.elements.forEach(e=>byId[e.id]=e);
     const short={};bs.teams.forEach(t=>short[t.id]=t.short_name);
-    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};OWN={};XG={};
+    LIVESTAT={};CHANCE={};PRICE={};LIVEEL={};OWN={};XG={};PRICEMOVE={};
     P.forEach(x=>{
       const e=byId[FPLID[x.n]];if(!e)return;
       PRICE[x.n]=e.now_cost/10;
@@ -34,7 +34,14 @@ async function loadLive(){
       LIVEEL[x.n]={form:parseFloat(e.form)||0,ep:parseFloat(e.ep_next)||0};
       OWN[x.n]=parseFloat(e.selected_by_percent)||0;
       XG[x.n]={xg:parseFloat(e.expected_goals_per_90)||0,xa:parseFloat(e.expected_assists_per_90)||0,xgc:parseFloat(e.expected_goals_conceded_per_90)||0,mins:e.minutes||0,ppg:parseFloat(e.points_per_game)||0};
+      PRICEMOVE[x.n]=(e.cost_change_event||0)/10;
     });
+    NEWS=bs.elements.filter(e=>(e.news||"").trim()).map(e=>({
+        n:e.web_name,t:short[e.team],news:e.news,added:e.news_added||"",
+        chance:e.chance_of_playing_next_round,
+        avail:!/joined|loan|transferred|left the club/i.test(e.news)   // availability news, not a completed move
+      }))
+      .sort((a,b)=>(b.avail-a.avail)||(b.added||"").localeCompare(a.added||""));
     LIVEFX={};
     fx.forEach(f=>{
       if(!f.event)return; // unscheduled fixture: ignore until it gets a gameweek
@@ -81,20 +88,35 @@ function predPts(x){return predParts(x).pred}
 // expected minutes 15, value 10, long-term 10. A component with no data yet
 // (form preseason, value with no price) drops out and the weights renormalise,
 // exactly like the prediction blend. metaParts() exposes every line for "Why?".
+// Seven factors, matching the dashboard donut. Predicted points is deliberately NOT a
+// component: form, fixtures, minutes and underlying threat are its own ingredients, so
+// including it as well would double-count them.
+const ATTACK_BENCH={F:0.75,M:0.55,D:0.22,G:0.10};
+function attackScore(x){
+  const d=XG[x.n];
+  if(!d||d.mins<180)return null;
+  const threat=Math.min(100,(d.xg+d.xa)/ATTACK_BENCH[x.p]*100);
+  if(x.p==="F"||x.p==="M")return threat;
+  const solid=d.xgc>0?Math.max(0,Math.min(100,(1.8-d.xgc)/1.4*100)):null;
+  if(x.p==="G")return solid;
+  return solid===null?threat:Math.round(threat*0.4+solid*0.6);
+}
 function metaParts(x){
   const L=LIVEEL[x.n]||{};
   const g0=META.gw||1;
   let fxa=0,fxn=0;for(let g=g0;g<Math.min(39,g0+5);g++){fxa+=fxMult(x.t,g);fxn++;}
   const fixScore=Math.max(0,Math.min(100,((fxa/fxn)-0.6)/0.75*100));
+  const own=OWN[x.n];
   const parts=[
-    ["Form",20,L.form>0?Math.min(100,L.form/8*100):null],
-    ["Predicted points",25,Math.min(100,predPtsAt(x,g0)/7*100)],
+    ["Form",25,L.form>0?Math.min(100,L.form/8*100):null],
     ["Fixtures (next 5)",20,fixScore],
-    ["Minutes",15,startProb(x)],
+    ["Underlying threat",20,attackScore(x)],
+    ["Minutes security",15,startProb(x)],
     ["Value",10,PRICE[x.n]?Math.min(100,(x.pts/38)/PRICE[x.n]/0.8*100):null],
-    ["Long-term",10,x.v]
+    ["Differential",5,own===undefined?null:Math.max(0,100-own*2)],
+    ["Long-term quality",5,x.v]
   ];
-  const live=parts.filter(c=>c[2]!==null);
+  const live=parts.filter(c=>c[2]!==null&&c[2]!==undefined);
   const wsum=live.reduce((s,c)=>s+c[1],0);
   const total=Math.round(live.reduce((s,c)=>s+c[1]*c[2],0)/wsum);
   return {parts,wsum,total};
@@ -104,7 +126,7 @@ function metaParts(x){
 // number: 50% minutes certainty, 30% how closely the signals agree, 20% how many
 // signals exist at all. Early season has fewer signals, so confidence is honestly
 // lower for everyone until matches are played.
-const BANDS=[[85,"Very high","var(--a)"],[70,"High","var(--a)"],[50,"Medium","var(--warn)"],[30,"Low","#e08a76"],[0,"Very low","#e08a76"]];
+const BANDS=[[85,"Very high","var(--a)"],[70,"High","var(--a)"],[50,"Medium","var(--warn)"],[30,"Low","var(--danger)"],[0,"Very low","var(--danger)"]];
 function confidenceOf(x){
   const f=predParts(x),mins=startProb(x),n=f.sig.length;
   const completeness=n>=3?100:n===2?70:40;
@@ -194,9 +216,13 @@ async function loadAccuracy(){
   ACC.loading=false;render();
 }
 function updateStrip(){
-  const el=document.getElementById("liveStrip");if(!el)return;
-  if(LIVEOK)el.innerHTML='<span style="color:var(--a);font-weight:600;">&#9679; Live</span> &middot; GW'+META.gw+' &middot; '+META.date+' &middot; updated '+META.updated.replace("live feed, ","");
-  else el.innerHTML='<span style="color:var(--warn);font-weight:600;">&#9675; '+(liveTries>0&&liveTries<=3?'Connecting&hellip;':'Stored data')+'</span> &middot; GW'+META.gw+(liveTries>3?' &middot; refresh to retry':'');
+  const el=document.getElementById("liveStrip");
+  if(el){
+    if(LIVEOK)el.innerHTML='<span style="color:var(--a);font-weight:700;">&#9679; Live</span> &middot; updated '+META.updated.replace("live feed, ","")+' &middot; 2026/27 season';
+    else el.innerHTML='<span style="color:var(--warn);font-weight:700;">&#9675; '+(liveTries>0&&liveTries<=3?'Connecting&hellip;':'Stored data')+'</span>'+(liveTries>3?' &middot; reopen to retry':'');
+  }
+  const dc=document.getElementById("deadlineCard");
+  if(dc)dc.innerHTML='<div class="k">Gameweek '+(META.gw||1)+' deadline</div><div class="v">'+(DEADLINE||"&mdash;")+'</div>';
 }
 let lastLoad=0,liveTries=0;
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&Date.now()-lastLoad>300000)loadLive();});
@@ -248,10 +274,13 @@ function fxOf(t){
   const f=FIX.find(x=>x[0]===t);return f?f[1]:3;
 }
 function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
-let tab="squads",posF="ALL",ownF="ALL",q="",sortMode="val";
+let tab="dash",posF="ALL",ownF="ALL",q="",sortMode="val";
 function esc(s){return s.replace(/'/g,"\\'")}
+const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
 function render(){
   updateStrip();
+  const pt=document.getElementById("pageTitle");
+  if(pt)pt.childNodes[0].nodeValue=(FOCUS?"Player profile":(TITLES[tab]||"Dashboard"))+(tab==="dash"&&META.gw?" \u00b7 Gameweek "+META.gw:"");
   if(FOCUS){document.getElementById("view").innerHTML=playerView();document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("on"));return;}
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
   const v=document.getElementById("view");
@@ -261,6 +290,8 @@ function render(){
   if(tab==="planner")return v.innerHTML=plannerView();
   if(tab==="accuracy")return v.innerHTML=accuracyView();
   if(tab==="builder")return v.innerHTML=builderView();
+  if(tab==="dash")return v.innerHTML=dashView();
+  if(tab==="news")return v.innerHTML=newsView();
   if(tab==="picks")return v.innerHTML=bestPicksView();
   if(tab==="compare")return v.innerHTML=compareView();
 }
@@ -277,7 +308,7 @@ function squadsView(){
 }
 function rowHtml(x,showOwner){
   const st=statusOf(x.n);
-  const flag=st===2?'<span style="font-size:10px;font-weight:700;color:#e08a76;flex-shrink:0;">OUT</span>':(CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'');
+  const flag=st===2?'<span style="font-size:10px;font-weight:700;color:var(--danger);flex-shrink:0;">OUT</span>':(CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'');
   const club=showOwner?'<span class="tc" style="background:'+(TEAMCOL[x.t]||'#888')+'22;color:'+(TEAMCOL[x.t]||'#aaa')+';">'+x.t+'</span>':'';
   const open=' style="cursor:pointer;" onclick="openPlayer(\''+esc(x.n)+'\')"';
   const small=(showOwner?'':x.t+' ')+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'');
@@ -386,7 +417,7 @@ function builderView(){
   const metas=squadFlat().map(metaOf);
   const sqMeta=metas.length?Math.round(metas.reduce((a,b)=>a+b,0)/metas.length):0;
   h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;">';
-  h+='<div><div style="font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;">Budget</div><div style="font-size:16px;font-weight:700;color:'+(left<0?'#e08a76':'var(--txt)')+'">&pound;'+left.toFixed(1)+'m left</div><div style="font-size:11px;color:var(--sub);">'+count+'/15 &middot; &pound;'+spent.toFixed(1)+'m spent</div></div>';
+  h+='<div><div style="font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;">Budget</div><div style="font-size:16px;font-weight:700;color:'+(left<0?'var(--danger)':'var(--txt)')+'">&pound;'+left.toFixed(1)+'m left</div><div style="font-size:11px;color:var(--sub);">'+count+'/15 &middot; &pound;'+spent.toFixed(1)+'m spent</div></div>';
   h+='<div style="text-align:right;"><div style="font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;">Squad Meta</div><div style="font-size:22px;font-weight:700;color:var(--a);">'+(count?sqMeta:0)+'<span style="font-size:12px;color:var(--sub);">/100</span></div>'+(count===15?'<div style="font-size:11px;color:var(--sub);">predicted GW pts: '+bestXIPred(squadFlat()).toFixed(1)+'</div>':'<div style="font-size:11px;color:var(--sub);">'+(15-count)+' slots empty</div>')+'</div></div>';
   h+='<div style="display:flex;gap:6px;margin-top:9px;">';
   h+='<button onclick="optimiseSquad();render()" style="flex:1;background:var(--accentbtn,#2c4a3e);border:1px solid var(--a);color:var(--a);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:700;">&#10024; Optimise squad</button>';
@@ -430,7 +461,7 @@ function builderView(){
     sw.forEach(s=>{h+='<div class="row" style="cursor:pointer;" onclick="CMP=[\''+esc(s.o)+'\',\''+esc(s.i)+'\'];tab=\'compare\';render()"><span class="pn">'+s.o+' &rarr; <b>'+s.i+'</b></span><span class="val" style="color:var(--a);">+'+s.gain.toFixed(1)+' Meta</span></div>';});
     h+='</div>';
   }
-  if(left<0)h+='<div class="card" style="border-color:rgba(224,110,90,.5);"><div style="font-size:12.5px;color:#e08a76;">Over budget by &pound;'+(-left).toFixed(1)+'m. Remove someone or optimise.</div></div>';
+  if(left<0)h+='<div class="card" style="border-color:rgba(224,110,90,.5);"><div style="font-size:12.5px;color:var(--danger);">Over budget by &pound;'+(-left).toFixed(1)+'m. Remove someone or optimise.</div></div>';
   return h;
 }
 function pickerHtml(){
@@ -595,7 +626,7 @@ function playerView(){
   // Event probabilities
   h+='<div class="card"><div class="lbl">What he is likely to DO in GW'+g0+'</div>';
   if(!ev)h+='<div style="font-size:12.5px;color:var(--sub);">Not enough match evidence yet. He has '+((XG[x.n]||{}).mins||0)+' minutes on record, and these probabilities need at least 180. They appear once he has played.</div>';
-  else if(ev.ruledOut)h+='<div style="font-size:12.5px;color:#e08a76;">Ruled out of this gameweek, so every probability is zero.</div>';
+  else if(ev.ruledOut)h+='<div style="font-size:12.5px;color:var(--danger);">Ruled out of this gameweek, so every probability is zero.</div>';
   else if(ev.blank)h+='<div style="font-size:12.5px;color:var(--sub);">'+x.t+' have no fixture in GW'+g0+' (blank gameweek).</div>';
   else{
     h+=pctBar("Plays 60+ minutes",ev.p60);
@@ -626,6 +657,103 @@ function playerView(){
   h+='<div style="display:flex;gap:6px;">';
   h+='<button onclick="CMP=[\''+esc(x.n)+'\'];findAlternatives();tab=\'compare\';FOCUS=null;render()" style="flex:1;background:var(--card2);border:1px solid var(--a);color:var(--a);border-radius:8px;padding:9px 0;font-size:12.5px;font-weight:700;">Compare with alternatives</button>';
   h+='</div>';
+  return h;
+}
+// ---- Dashboard (phase 8) ----
+function initials(n){const p=n.split(" ");return (p[0][0]+(p.length>1?p[p.length-1][0]:"")).toUpperCase();}
+function avatar(x,size){
+  const c=TEAMCOL[x.t]||"#888";
+  return '<div class="avatar" style="background:'+c+'1f;color:'+c+';'+(size?'width:'+size+'px;height:'+size+'px;font-size:'+(size/3)+'px;':'')+'">'+initials(x.n)+'</div>';
+}
+function heroCard(tag,x,big,sub){
+  return '<div class="hero"><div class="tag">'+tag+'</div><div style="display:flex;gap:9px;align-items:center;">'+avatar(x)+'<div style="min-width:0;"><div class="nm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+x.n+'</div><div class="big">'+big+'</div><div class="sm">'+sub+'</div></div></div></div>';
+}
+function donut(parts){
+  const cols=["#7C4DFF","#3D6BE5","#00A870","#C6912B","#E5679B","#22B8CF","#8B88A0"];
+  let off=0,segs="";
+  const total=parts.reduce((s,p)=>s+p[1],0);
+  parts.forEach((p,i)=>{
+    const frac=p[1]/total,len=frac*100;
+    segs+='<circle r="15.9155" cx="21" cy="21" fill="none" stroke="'+cols[i%cols.length]+'" stroke-width="7" stroke-dasharray="'+len.toFixed(2)+' '+(100-len).toFixed(2)+'" stroke-dashoffset="'+(25-off).toFixed(2)+'"></circle>';
+    off+=len;
+  });
+  return {svg:'<svg viewBox="0 0 42 42" style="width:104px;height:104px;flex-shrink:0;">'+segs+'<text x="21" y="21" text-anchor="middle" font-size="7" font-weight="800" fill="var(--txt)">META</text><text x="21" y="27" text-anchor="middle" font-size="4.4" fill="var(--sub)">7 factors</text></svg>',cols};
+}
+function dashView(){
+  if(!LIVEOK)return '<div class="card"><div class="lbl">Connecting</div><div style="font-size:13px;">Pulling live prices, injuries and fixtures from the official feed. '+(liveTries>3?"Tap a section to retry.":"One moment&hellip;")+'</div></div>';
+  const g0=META.gw||1;
+  const squad=P.filter(x=>x.o===bpSource);
+  let h='';
+  // Hero row
+  const capt=squad.slice().sort((a,b)=>predPts(b)-predPts(a))[0];
+  const diff=poolPlayers().filter(x=>(OWN[x.n]||0)<10&&startProb(x)>=75).sort((a,b)=>metaOf(b.n)-metaOf(a.n))[0];
+  const movers=poolPlayers().filter(x=>PRICEMOVE[x.n]).sort((a,b)=>PRICEMOVE[b.n]-PRICEMOVE[a.n]);
+  const riser=movers.length?movers[0]:poolPlayers().filter(x=>PRICE[x.n]).sort((a,b)=>(metaOf(b.n)/PRICE[b.n])-(metaOf(a.n)/PRICE[a.n]))[0];
+  const risk=squad.slice().filter(x=>statusOf(x.n)<2).sort((a,b)=>startProb(a)-startProb(b))[0];
+  h+='<div class="grid g4" style="margin-bottom:12px;">';
+  if(capt)h+=heroCard("Best captain",capt,predPts(capt).toFixed(1)+" pts",confidenceOf(capt).pct+"% confidence");
+  if(diff)h+=heroCard("Best differential",diff,(OWN[diff.n]||0).toFixed(1)+"% owned","Meta "+metaOf(diff.n));
+  if(riser)h+=heroCard(movers.length?"Biggest riser":"Best value",riser,movers.length?("+&pound;"+PRICEMOVE[riser.n].toFixed(1)+"m"):("Meta "+metaOf(riser.n)),movers.length?"price change this GW":"&pound;"+(PRICE[riser.n]||0).toFixed(1)+"m &middot; best Meta per &pound;m");
+  if(risk)h+=heroCard("Biggest rotation risk",risk,Math.round(startProb(risk))+"% to start",confidenceOf(risk).risk[0]||"watch team news");
+  h+='</div>';
+  h+='<div class="grid g3">';
+  // Left column
+  h+='<div>';
+  const top=poolPlayers().slice().sort((a,b)=>metaOf(b.n)-metaOf(a.n)).slice(0,5);
+  h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;"><div class="lbl" style="margin:0;">Top players &middot; all positions</div><button class="btn ghost" style="padding:5px 11px;font-size:11.5px;" onclick="tab=\'players\';render()">View all</button></div>';
+  h+='<div class="row" style="color:var(--sub);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;"><span class="rk">#</span><span class="tc" style="visibility:hidden;">X</span><span class="pn">Player</span><span class="val">Price</span><span class="val">Meta</span><span class="val">Pred</span></div>';
+  top.forEach((x,i)=>{h+='<div class="row" style="cursor:pointer;" onclick="openPlayer(\''+esc(x.n)+'\')"><span class="rk">'+(i+1)+'</span><span class="tc" style="background:'+(TEAMCOL[x.t]||"#888")+'1f;color:'+(TEAMCOL[x.t]||"#888")+';">'+x.t+'</span><span class="pn">'+x.n+'</span><span class="val">&pound;'+(PRICE[x.n]||0).toFixed(1)+'m</span><span class="val" style="color:var(--a);font-weight:800;">'+metaOf(x.n)+'</span><span class="val">'+predPts(x).toFixed(1)+'</span></div>';});
+  h+='<div style="font-size:11px;color:var(--sub);margin-top:7px;">Ranked by Meta, which rewards value, fixtures and minutes as well as quality, so a cheap player with an easy run can outrank a superstar. Predicted points is the raw output figure.</div></div>';
+  // Fixture difficulty grid
+  h+='<div class="card"><div class="lbl">Fixture difficulty &middot; next 6 gameweeks</div><table class="fxgrid"><tr><th></th>';
+  for(let g=g0;g<Math.min(39,g0+6);g++)h+='<th>GW'+g+'</th>';
+  h+='</tr>';
+  const teamOrder=Object.keys(TEAMCOL).map(t=>{let s=0;for(let g=g0;g<Math.min(39,g0+6);g++)s+=fxMult(t,g);return{t,s};}).sort((a,b)=>b.s-a.s).slice(0,6);
+  teamOrder.forEach(o=>{
+    h+='<tr><td class="t"><span class="tc" style="background:'+TEAMCOL[o.t]+'1f;color:'+TEAMCOL[o.t]+';">'+o.t+'</span></td>';
+    for(let g=g0;g<Math.min(39,g0+6);g++){
+      const m=fxMult(o.t,g),band=m>=1.25?5:m>=1.1?4:m>=0.95?3:m>=0.75?2:m>0?1:0;
+      h+='<td class="c fx'+(band||1)+'">'+(band?band:"&mdash;")+'</td>';
+    }
+    h+='</tr>';
+  });
+  h+='</table><div style="font-size:11px;color:var(--sub);margin-top:7px;">5 = easiest run, 1 = hardest. Dash means no fixture that week.</div></div>';
+  // Right column
+  h+='<div>';
+  const parts=[["Form",25],["Fixtures",20],["Underlying threat",20],["Minutes security",15],["Value",10],["Differential",5],["Long-term",5]];
+  const d=donut(parts);
+  h+='<div class="card"><div class="lbl">Meta rating explained</div><div class="donut-wrap">'+d.svg+'<div class="legend">';
+  parts.forEach((p,i)=>{h+='<div><i style="background:'+d.cols[i]+'"></i>'+p[0]+' <span style="color:var(--sub);float:right;">'+p[1]+'%</span></div>';});
+  h+='</div></div><div style="font-size:11.5px;color:var(--sub);margin-top:9px;line-height:1.6;">Every player scores out of 100 on each factor. Missing data (form before a ball is kicked) drops out and the rest are reweighted. Tap any player to see his own breakdown.</div></div>';
+  // Team news
+  h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;"><div class="lbl" style="margin:0;">Latest team news</div><button class="btn ghost" style="padding:5px 11px;font-size:11.5px;" onclick="tab=\'news\';render()">View all</button></div>';
+  if(!NEWS.filter(n=>n.avail).length)h+='<div style="font-size:12.5px;color:var(--sub);">No injury or availability news in the feed right now.</div>';
+  const availNews=NEWS.filter(n=>n.avail);
+  availNews.slice(0,4).forEach(n=>{h+='<div class="news"><span class="tc" style="background:'+(TEAMCOL[n.t]||"#888")+'1f;color:'+(TEAMCOL[n.t]||"#888")+';">'+n.t+'</span><div><div class="nt">'+n.n+'</div><div class="nb">'+n.news+'</div></div></div>';});
+  h+='</div>';
+  h+='</div></div>';
+  // CTAs
+  h+='<div class="grid g2" style="margin-top:12px;">';
+  h+='<div class="cta" style="background:linear-gradient(180deg,#1B5E43,#124430);color:#fff;"><h3>Build your squad</h3><p style="color:#9FD9BC;">Create the best possible squad within the &pound;100m budget, then let the optimiser improve it.</p><button class="btn" onclick="tab=\'builder\';render()">Start building &rarr;</button></div>';
+  h+='<div class="cta" style="background:var(--card);border:1px solid var(--line);"><h3>What should I do this week?</h3><p style="color:var(--sub);">Captain, warnings, transfer targets and differentials for your squad, each with a confidence figure and a reason.</p><button class="btn ghost" onclick="tab=\'picks\';render()">Open Best Picks &rarr;</button></div>';
+  h+='</div>';
+  return h;
+}
+function newsView(){
+  if(!LIVEOK)return '<div class="card"><div class="lbl">Connecting</div><div style="font-size:13px;">Waiting for the official feed&hellip;</div></div>';
+  let h='<div class="note"><b>Straight from the official feed.</b> Every player currently carrying an injury, suspension or availability note, newest first. Where the game publishes a chance of playing, it is shown, and the app already applies it to that player\'s predictions.</div>';
+  h+='<div class="card">';
+  if(!NEWS.length)h+='<div style="font-size:13px;color:var(--sub);">Nothing flagged right now.</div>';
+  const av=NEWS.filter(n=>n.avail),mv=NEWS.filter(n=>!n.avail);
+  const draw=n=>{
+    const ch=n.chance!=null?'<span class="conf" style="background:'+(n.chance>=75?"var(--warn)":"var(--danger)")+'1f;color:'+(n.chance>=75?"var(--warn)":"var(--danger)")+';">'+n.chance+'%</span>':'';
+    return '<div class="news"><span class="tc" style="background:'+(TEAMCOL[n.t]||"#888")+'1f;color:'+(TEAMCOL[n.t]||"#888")+';">'+n.t+'</span><div style="flex:1;min-width:0;"><div class="nt">'+n.n+' '+ch+'</div><div class="nb">'+n.news+'</div></div></div>';
+  };
+  h+='<div class="lbl">Availability ('+av.length+')</div>';
+  if(!av.length)h+='<div style="font-size:13px;color:var(--sub);">Nothing flagged right now.</div>';
+  av.forEach(n=>{h+=draw(n)});
+  h+='</div>';
+  if(mv.length){h+='<div class="card"><div class="lbl">Squad moves ('+mv.length+')</div>';mv.forEach(n=>{h+=draw(n)});h+='</div>';}
   return h;
 }
 function accuracyView(){
@@ -675,7 +803,7 @@ function plannerView(){
   let h='<div class="card"><div class="lbl">Data status</div><div style="font-size:13px;">Gameweek '+META.gw+' &middot; '+META.date+'</div>';
   if(LIVEOK)h+='<div style="font-size:11.5px;color:var(--a);margin:2px 0 8px;">&#9679; Live: prices, injuries and fixture difficulty from the official FPL feed &middot; '+META.updated+'</div>';
   else h+='<div style="font-size:11.5px;color:var(--warn);margin:2px 0 8px;">Live feed unreachable &mdash; using stored data ('+META.updated+'). Tap refresh to retry.</div>';
-  h+='<button id="refBtn" onclick="refreshLive()" style="width:100%;background:var(--card2);border:1px solid #3d4854;color:var(--txt);border-radius:8px;padding:9px 0;font-size:13px;font-weight:600;margin-bottom:6px;">Refresh live data</button>';
+  h+='<button id="refBtn" onclick="refreshLive()" style="width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px 0;font-size:13px;font-weight:600;margin-bottom:6px;">Refresh live data</button>';
   h+='<textarea id="packBox" placeholder="Optional: paste a momentum data pack from Claude chat here" style="width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:12px;height:52px;margin-bottom:6px;"></textarea>';
   h+='<button onclick="applyPack(document.getElementById(\'packBox\').value)" style="width:100%;background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;">Apply pack</button></div>';
   h+='<select onchange="planTeam=this.value;render()">'+["K","L","J"].map(o=>'<option value="'+o+'"'+(planTeam===o?" selected":"")+'>'+NAMES[o]+"'s plan</option>").join("")+'</select>';
@@ -710,8 +838,8 @@ function plannerView(){
     const inj=statusOf(x.n);const mo=MOM[x.n]||0;
     const ch=CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'';
     const cf=confChip(x);
-    const moChip=mo?'<span style="font-size:10px;font-weight:700;color:'+(mo>0?'var(--a)':'#e08a76')+';flex-shrink:0;">'+(mo>0?'&#9650;':'&#9660;')+Math.abs(mo)+'</span>':'';
-    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn" style="cursor:pointer;" onclick="expanded=expanded===\''+esc(x.n)+'\'?null:\''+esc(x.n)+'\';render()">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span>'+ch+moChip+cf+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'#e08a76':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>'+(expanded===x.n?factorsHtml(x):'');
+    const moChip=mo?'<span style="font-size:10px;font-weight:700;color:'+(mo>0?'var(--a)':'var(--danger)')+';flex-shrink:0;">'+(mo>0?'&#9650;':'&#9660;')+Math.abs(mo)+'</span>':'';
+    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn" style="cursor:pointer;" onclick="expanded=expanded===\''+esc(x.n)+'\'?null:\''+esc(x.n)+'\';render()">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span>'+ch+moChip+cf+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'var(--danger)':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>'+(expanded===x.n?factorsHtml(x):'');
   }
   h+='<div class="card"><div class="lbl">Recommended XI &middot; Gameweek '+gwSel+' &middot; predicted points &middot; tap a name for why</div>';
   xi.sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.e-a.e).forEach(x=>{h+=prow(x)});

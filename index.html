@@ -7,20 +7,36 @@
 <link rel="stylesheet" href="css/app.css?v=d7bba716">
 </head>
 <body>
-<h1>FPL Season HQ &middot; 2026/27</h1>
-<div id="liveStrip" style="font-size:11.5px;margin-bottom:8px;color:var(--sub);">Loading live data&hellip;</div>
-<a href="how-it-works.html" style="display:block;background:var(--card);border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;text-align:center;text-decoration:none;margin-bottom:10px;">New here? Read how this works &rarr;</a>
-<div class="tabs">
-  <button data-t="squads" class="on">Squads</button>
-  <button data-t="players">Players</button>
-  <button data-t="fixtures">Fixtures</button>
-  <button data-t="planner">GW Plan</button>
-  <button data-t="accuracy">Accuracy</button>
-  <button data-t="picks">Best Picks</button>
-  <button data-t="compare">Compare</button>
-  <button data-t="builder">Builder</button>
+<div class="shell">
+  <aside class="side">
+    <div class="brand">FPL <span>SEASON HQ</span></div>
+    <div class="brand-sub">Make smarter FPL decisions.</div>
+    <div class="tabs">
+      <button data-t="dash" class="on">Dashboard</button>
+      <button data-t="picks">Best Picks</button>
+      <button data-t="players">Players</button>
+      <button data-t="compare">Player Comparison</button>
+      <button data-t="builder">Squad Builder</button>
+      <button data-t="planner">GW Plan</button>
+      <button data-t="squads">Draft Squads</button>
+      <button data-t="fixtures">Fixtures</button>
+      <button data-t="news">Team News</button>
+      <button data-t="accuracy">Accuracy</button>
+    </div>
+    <div class="pro">
+      <b>Pro tools</b>
+      <p>Transfer planner and multi-week optimiser are still being built. Nothing to buy yet.</p>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <div class="h1" id="pageTitle">Dashboard<small id="liveStrip">Loading live data&hellip;</small></div>
+      <div class="deadline" id="deadlineCard"><div class="k">Next deadline</div><div class="v">&mdash;</div></div>
+    </div>
+    <div id="view"></div>
+    <div style="margin-top:16px;"><a href="how-it-works.html" style="font-size:12.5px;color:var(--sub);">How this works, and what it cannot do &rarr;</a></div>
+  </main>
 </div>
-<div id="view"></div>
 
 <script src="js/data.js?v=d7bba716"></script>
 <script src="js/app.js?v=d7bba716"></script>
