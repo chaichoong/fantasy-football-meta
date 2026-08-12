@@ -2,3 +2,12 @@ name = "fpl-relay"
 main = "worker.js"
 compatibility_date = "2026-08-01"
 workers_dev = true
+
+# NO [triggers] block on purpose: the Cloudflare free plan allows 5 cron triggers
+# per account and all 5 belong to live OD workers. The hourly timer is a GitHub
+# Actions workflow (.github/workflows/snapshot.yml) that calls GET /snap; the
+# snapshot window and immutability decisions all live in worker code either way.
+
+[[kv_namespaces]]
+binding = "PREDICTIONS"
+id = "d8a8e65a14de4cd8a78a7b8c7fdb2b10"

@@ -44,9 +44,42 @@ displays in predicted-points units; tapping a player shows every factor line by 
 Squads standings stay on fixed draft value by design. The repo was also restructured in
 the same phase: index.html + css/app.css + js/data.js + js/app.js, no build step.
 
-### Phase 4 — Prediction accuracy page
-Each week, record the predicted top 10 before the deadline; show the real top 10 after.
-Simple hit-rate. This is what proves whether the model is any good.
+### Phase 4 — Prediction accuracy page ✅ DONE 12 Aug 2026
+Relay worker + Cloudflare KV (`PREDICTIONS`, binding in relay/wrangler.toml). An hourly
+GitHub Actions heartbeat (.github/workflows/snapshot.yml) pings `/snap`; the WORKER decides
+in code whether to store — final 2h before the deadline only, immutable once the deadline
+passes, last pre-deadline write wins. (Cloudflare cron was impossible: the free plan's 5
+cron slots are all held by live OD workers — do not steal one.) The Accuracy tab recomputes
+predictions from archived inputs with the same blend (momentum excluded — not archived) and
+shows average miss + top-10 hit rate against `/live?event=N` results. Also fixed Leo's
+loading-state flaw: 12s fetch timeout feeds the retry path, so a hang can no longer strand
+the page on "Loading live data".
+
+### Phases 5-8 — reshaped 12 Aug 2026 from Leo's product review
+Leo's review (12 Aug) set the direction for everything below: Meta Rating weights, the
+confidence bands, pitch-layout squad builder, and the priority order. His gap table was
+partly stale (it predates phase 3 — predicted points, start probabilities and per-GW
+predictions already exist) but the product instincts were right.
+
+**Phase 5 — Squad Builder + Meta Rating (official game layer).** £100m budget, 2/5/5/3,
+max 3 per club, pitch-style layout. Meta Rating /100 per Leo's weights: form 20, predicted
+points 25, fixtures 20, expected minutes 15, value 10, long-term 10 — with a "Why 91?"
+breakdown so the rating is never a mystery. Optimise-my-squad via constrained optimisation
+(never brute force), then suggested swaps with the Meta gain per swap.
+
+**Phase 6 — Best Picks + confidence bands.** Captain (expected points AND ceiling),
+transfers in/out, differentials, best-per-position. Leo's five confidence bands
+(very high 85-100 ... very low <30) applied across all predictions.
+
+**Phase 7 — Player prediction page.** Per player: goal %, assist %, clean-sheet %,
+60+ minutes %, derived from the feed's expected_goals/assists per-90 suite (confirmed
+present 12 Aug) + start probability + written reason. Match predictor stays parked until
+this lands; team-level xG aggregates may then make a modest win/draw/loss card honest.
+
+**Phase 8 — Visual redesign.** Premier League-inspired identity of our own (never copied
+branding): dashboard command-centre homepage, player cards, pitch UI. Player photos remain
+parked pending a properly licensed source; club colours and initials do the visual work
+until then.
 
 ### Phase 5 — Official-game layer
 £100m budget tracker, 2 GK / 5 DEF / 5 MID / 3 FWD, max 3 per club, and the squad builder

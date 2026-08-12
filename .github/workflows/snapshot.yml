@@ -1,0 +1,16 @@
+name: Snapshot predictions
+# Hourly heartbeat only. The worker decides IN CODE whether to store anything:
+# it snapshots in the final 2h before each gameweek deadline (read from the
+# feed's own deadline_time) and refuses all writes after the deadline, so the
+# accuracy record can never be rewritten. Runs here because the Cloudflare free
+# plan's 5 cron slots are all taken by other live workers.
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping snapshot endpoint
+        run: curl -fsS "https://fpl-relay.kevinbrittain.workers.dev/snap"

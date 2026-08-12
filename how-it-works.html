@@ -44,7 +44,7 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <p>It is a single web page that helps you pick your Fantasy Premier League team each week. It holds the three squads from your draft (Kevin, Leo and James), a database of around 319 players with a score on each one, how hard every club's early fixtures are, and a recommended starting eleven for any gameweek you choose.</p>
 <p>It is a helper, not a robot. It suggests. You decide, and you still set your real team in the official FPL app.</p>
 
-<h2>The four tabs</h2>
+<h2>The five tabs</h2>
 
 <div class="card">
 <div class="lbl">Squads</div>
@@ -72,6 +72,11 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <li><b>waiver targets</b>: undrafted players who score higher than your weakest player in the same position, and it names who to drop</li>
 </ul>
 <p>Every player has a <b>Fit / Doubt / Out</b> button. Tap it to change it. Out drops him from the eleven, Doubt weakens him.</p>
+</div>
+
+<div class="card">
+<div class="lbl">Accuracy</div>
+<p>The receipts. In the final 2 hours before every deadline the system freezes what the model knew. After the matches it shows predicted against actual points, the average miss, and how many of the predicted top 10 really finished top 10. Records cannot be edited after the deadline, so the model cannot mark its own homework.</p>
 </div>
 
 <h2>The score: one formula, four parts</h2>
@@ -118,7 +123,7 @@ th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6p
 <ul>
 <li><b>Half live, half fixed, on purpose.</b> Prices, injuries, form, the official expected score and fixture difficulty are live from the feed. The draft-night quality score and the grades are fixed. So predictions move with real news and real form, while the Squads standings never shift under you.</li>
 <li><b>The Refresh button refreshes facts only.</b> It re-pulls prices, injuries and fixtures from the feed. It does not recalculate anyone's quality score, and momentum still arrives by pasting a data pack.</li>
-<li><b>These are predictions, not results.</b> No real FPL points, no league table, no live scores. It never finds out whether it was right.</li>
+<li><b>It keeps score on itself.</b> The Accuracy tab freezes every prediction before the deadline and compares it with real points afterwards. What it still does not have: live match scores or a league table for your head-to-head.</li>
 <li><b>It is not connected to the official FPL game.</b> It cannot see your real team and it cannot make transfers. You still do all of that yourself.</li>
 <li><b>It does not pick a captain</b> or handle chips like Triple Captain and Bench Boost.</li>
 <li><b>Fixture difficulty now covers all 38 gameweeks</b>, straight from the official ratings. A blank gameweek scores a player 0 and a double gameweek counts both matches.</li>

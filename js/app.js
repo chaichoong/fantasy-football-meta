@@ -20,8 +20,8 @@ async function loadLive(){
   lastLoad=Date.now();
   try{
     const [bs,fx]=await Promise.all([
-      fetch(RELAY+"/bootstrap").then(r=>r.json()),
-      fetch(RELAY+"/fixtures").then(r=>r.json())
+      fetch(RELAY+"/bootstrap",{signal:AbortSignal.timeout(12000)}).then(r=>r.json()),
+      fetch(RELAY+"/fixtures",{signal:AbortSignal.timeout(12000)}).then(r=>r.json())
     ]);
     const byId={};bs.elements.forEach(e=>byId[e.id]=e);
     const short={};bs.teams.forEach(t=>short[t.id]=t.short_name);
@@ -74,6 +74,40 @@ function predParts(x){
   return {sig,wsum,base,avail,fx,mom,pred:base*fx*avail*mom};
 }
 function predPts(x){return predParts(x).pred}
+// ---- Accuracy (phase 4) ----
+// Snapshots are the model's inputs archived by the relay in the final 2h before
+// each deadline, immutable afterwards. Predictions here are recomputed from the
+// archived inputs with the same blend as predParts (no momentum: packs are
+// ephemeral and were not archived), so the page judges exactly what the model
+// knew at the deadline — no retro-fitting possible.
+let ACC={list:null,loading:false,detail:{},actual:{},error:false};
+function predFromSnap(x,snap){
+  const rec=snap.players[FPLID[x.n]];if(!rec)return null;
+  const ep=rec[0],form=rec[1],st=rec[2],ch=rec[3];
+  const sig=[[0.4,x.pts/38]];if(form>0)sig.push([0.3,form]);if(ep>0)sig.push([0.3,ep]);
+  const w=sig.reduce((s,c)=>s+c[0],0);const base=sig.reduce((s,c)=>s+c[0]*c[1],0)/w;
+  if(st===2)return 0;
+  const avail=st===1?(ch!=null?ch/100:0.6):1;
+  let fx=0;snap.fixtures.forEach(f=>{if(f.h===x.t)fx+=fdrMult(f.dh);if(f.a===x.t)fx+=fdrMult(f.da)});
+  return base*fx*avail;
+}
+async function loadAccuracy(){
+  ACC.loading=true;ACC.error=false;render();
+  try{
+    const l=await fetch(RELAY+"/snapshots",{signal:AbortSignal.timeout(12000)}).then(r=>r.json());
+    ACC.list=l.snapshots||[];
+    for(const s of ACC.list){
+      if(!ACC.detail[s.gw])ACC.detail[s.gw]=await fetch(RELAY+"/snapshot?gw="+s.gw,{signal:AbortSignal.timeout(12000)}).then(r=>r.json());
+      try{
+        const lv=await fetch(RELAY+"/live?event="+s.gw,{signal:AbortSignal.timeout(12000)}).then(r=>r.json());
+        const pts={};let played=0;
+        (lv.elements||[]).forEach(e=>{pts[e.id]=e.stats.total_points;if(e.stats.minutes>0)played++;});
+        ACC.actual[s.gw]=played>0?pts:null;
+      }catch(e){ACC.actual[s.gw]=null;}
+    }
+  }catch(e){ACC.error=true;ACC.list=ACC.list||[];}
+  ACC.loading=false;render();
+}
 function updateStrip(){
   const el=document.getElementById("liveStrip");if(!el)return;
   if(LIVEOK)el.innerHTML='<span style="color:var(--a);font-weight:600;">&#9679; Live</span> &middot; GW'+META.gw+' &middot; '+META.date+' &middot; updated '+META.updated.replace("live feed, ","");
@@ -139,6 +173,7 @@ function render(){
   if(tab==="players")return v.innerHTML=playersView();
   if(tab==="fixtures")return v.innerHTML=fixturesView();
   if(tab==="planner")return v.innerHTML=plannerView();
+  if(tab==="accuracy")return v.innerHTML=accuracyView();
 }
 function squadTotal(o){return P.filter(x=>x.o===o).reduce((s,x)=>s+x.v,0)}
 function squadsView(){
@@ -182,6 +217,37 @@ function fixturesView(){
   return h;
 }
 let planTeam="K",gwSel=META.gw||1,expanded=null;
+function accuracyView(){
+  if(ACC.list===null&&!ACC.loading)setTimeout(loadAccuracy,0);
+  let h='<div class="note"><b>Does the model actually work?</b> In the final 2 hours before every deadline the system freezes a copy of what the model knew. After the matches, predictions are compared with real FPL points here. Frozen records cannot be edited after the deadline, so the score is honest by construction.</div>';
+  if(ACC.loading)h+='<div class="card"><div class="lbl">Loading</div><div style="font-size:13px;">Fetching prediction history&hellip;</div></div>';
+  else if(ACC.error)h+='<div class="card"><div class="lbl">Unavailable</div><div style="font-size:13px;">Could not reach the history store. Reopen this tab to retry.</div></div>';
+  else if(!ACC.list||!ACC.list.length)h+='<div class="card"><div class="lbl">No records yet</div><div style="font-size:13px;">The first snapshot is taken automatically before the GW1 deadline ('+(DEADLINE||'Fri 21 Aug')+'). Come back after the first matches finish.</div></div>';
+  (ACC.list||[]).forEach(s=>{
+    const snap=ACC.detail[s.gw];if(!snap)return;
+    const act=ACC.actual[s.gw];
+    const preds=P.map(x=>({x,p:predFromSnap(x,snap)})).filter(r=>r.p!==null);
+    preds.sort((a,b)=>b.p-a.p);
+    h+='<div class="card"><div class="lbl">Gameweek '+s.gw+' &middot; frozen '+new Date(snap.taken).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+'</div>';
+    if(!act){
+      h+='<div style="font-size:12.5px;color:var(--sub);margin-bottom:6px;">Snapshot locked &middot; awaiting results. Top 10 predicted:</div>';
+      preds.slice(0,10).forEach((r,i)=>{h+='<div class="row"><span class="rk">'+(i+1)+'</span><span class="pn">'+r.x.n+'<small>'+r.x.t+' '+POSNAME[r.x.p]+'</small></span><span class="val">'+r.p.toFixed(1)+'</span></div>';});
+    }else{
+      const scored=preds.map(r=>({...r,a:act[FPLID[r.x.n]]!==undefined?act[FPLID[r.x.n]]:null})).filter(r=>r.a!==null);
+      const mae=scored.reduce((s,r)=>s+Math.abs(r.p-r.a),0)/scored.length;
+      const predTop=scored.slice(0,10);
+      const actTop=new Set(scored.slice().sort((a,b)=>b.a-a.a).slice(0,10).map(r=>r.x.n));
+      const hits=predTop.filter(r=>actTop.has(r.x.n)).length;
+      h+='<div style="font-size:12.5px;margin-bottom:6px;">Average miss: <b>'+mae.toFixed(1)+' pts</b> per player &middot; predicted top 10: <b>'+hits+'/10</b> were really in the top 10</div>';
+      h+='<div style="font-size:11px;color:var(--sub);margin-bottom:4px;display:flex;justify-content:space-between;"><span>Predicted top 10</span><span>predicted &rarr; actual</span></div>';
+      predTop.forEach((r,i)=>{
+        const good=Math.abs(r.p-r.a)<=2;
+        h+='<div class="row"><span class="rk">'+(i+1)+'</span><span class="pn">'+r.x.n+'<small>'+r.x.t+' '+POSNAME[r.x.p]+'</small></span><span class="val" style="color:'+(good?'var(--a)':'var(--sub)')+'">'+r.p.toFixed(1)+' &rarr; '+r.a+'</span></div>';});
+    }
+    h+='</div>';
+  });
+  return h;
+}
 const INJLBL=["Fit","Doubt","Out"];
 function cycleInj(n){const cur=statusOf(n);const nx=(cur+1)%3;const live=LIVESTAT[n]!==undefined?LIVESTAT[n]:0;if(nx===live)delete INJ[n];else INJ[n]=nx;saveInj();render();}
 // THE single weekly number. One formula, four inputs:
