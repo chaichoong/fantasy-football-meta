@@ -1,0 +1,4 @@
+
+# Wrangler build cache. Holds the Cloudflare account id and project name.
+# No credentials, but it is local build state and this repo is public.
+.wrangler/
