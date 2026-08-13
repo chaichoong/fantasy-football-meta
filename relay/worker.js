@@ -14,7 +14,9 @@ const UPSTREAM = "https://fantasy.premierleague.com/api";
 // storage from the open internet, so it accepts these values and silently ignores
 // everything else rather than letting a stranger choose our key names.
 const STAT_SITES = ["ffm", "sellmate"];
-const STAT_EVENTS = ["visit", "action", "return"];
+// "capped" means somebody wanted to use the tool and was turned away by a cost
+// brake. Without it a busy day looks identical to a quiet one from the outside.
+const STAT_EVENTS = ["visit", "action", "return", "capped"];
 const CACHE_SECS = 900;
 const SNAP_WINDOW_MS = 2 * 60 * 60 * 1000; // start snapshotting 2h before deadline
 

@@ -78,11 +78,17 @@ fetch("https://fpl-relay.kevinbrittain.workers.dev/stats")
       if (!rec) return;
       var visits = rec.byEvent.visit || 0;
       var used   = rec.byEvent.action || 0;
+      var capped = rec.byEvent.capped || 0;
       h += '<h2>' + esc(s.name) + '</h2>';
       h += '<div class="two">';
       h += '<div class="card"><div class="lbl">Visits</div><div class="big">' + visits + '</div></div>';
       h += '<div class="card"><div class="lbl">Used it</div><div class="big">' + used + '</div></div>';
       h += '</div>';
+      if (capped) {
+        h += '<div class="card warn"><div class="lbl">Turned away</div><div class="big">' + capped + '</div>' +
+             '<p class="sub">People who tried and hit a daily limit. If this is not zero, ' +
+             'raise the cap or you are paying for visitors and then refusing them.</p></div>';
+      }
 
       var days = Object.keys(rec.byDay).sort().reverse();
       var peak = 0;

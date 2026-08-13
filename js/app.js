@@ -54,7 +54,12 @@ async function loadLive(){
     });
     const next=bs.events.find(e=>e.is_next)||bs.events.find(e=>e.is_current)||bs.events[0];
     META.gw=next.id;
-    DEADLINE=new Date(next.deadline_time).toLocaleString("en-GB",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+    // Always render the deadline in UK time and say so. It is a UK competition with a
+    // single real deadline; showing it in the viewer's own timezone with no label meant
+    // the same moment read as 18:30 in London and 19:30 in France, with nothing on screen
+    // to say which. For a tool whose whole job is not missing the deadline, that is the
+    // one number that must never be ambiguous.
+    DEADLINE=new Date(next.deadline_time).toLocaleString("en-GB",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Europe/London"})+" UK";
     META.date=next.is_current?"in play":"deadline "+DEADLINE;
     META.updated="live feed, "+new Date().toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
     if(gwSel<META.gw||gwSel>META.gw+3)gwSel=META.gw;
@@ -86,7 +91,7 @@ function predParts(x){
   return {sig,wsum,base,avail,fx,mom,pred:base*fx*avail*mom};
 }
 function predPts(x){return predParts(x).pred}
-// ---- Meta Rating (phase 5, Leo's spec) ----
+// ---- Meta Rating (phase 5) ----
 // Player Meta /100: form 20, predicted points 25, fixtures (next 5 GWs) 20,
 // expected minutes 15, value 10, long-term 10. A component with no data yet
 // (form preseason, value with no price) drops out and the weights renormalise,
@@ -124,7 +129,7 @@ function metaParts(x){
   const total=Math.round(live.reduce((s,c)=>s+c[1]*c[2],0)/wsum);
   return {parts,wsum,total};
 }
-// ---- Confidence (phase 6, Leo's bands) ----
+// ---- Confidence (phase 6) ----
 // Confidence is NOT how good the player is. It is how much the model trusts its own
 // number: 50% minutes certainty, 30% how closely the signals agree, 20% how many
 // signals exist at all. Early season has fewer signals, so confidence is honestly
@@ -308,8 +313,8 @@ function render(){
 function squadTotal(o){return P.filter(x=>x.o===o).reduce((s,x)=>s+x.v,0)}
 function squadsView(){
   const T=["K","J","L"].map(o=>({o,tot:squadTotal(o),n:P.filter(x=>x.o===o).length,A:P.filter(x=>x.o===o&&x.g==="A").length}));
-  let h='<div class="teams">'+T.map(t=>'<div class="team '+(t.o==="K"?"kev":t.o==="L"?"leo":"jam")+'"><div class="tn">'+NAMES[t.o]+'</div><div class="score">'+t.tot+'</div><div class="meta">'+t.n+'/15 &middot; '+t.A+' A-grade</div></div>').join("")+'</div>';
-  h+='<div class="note"><b>Manager A 1001, Manager B 830, Manager C 807.</b> One metric everywhere in this app now: the draft value score (70% projected points, 20% minutes certainty, 10% ceiling and edge). This matches draft night exactly. The raw points index still appears per player as reference only; it is one input to the score, not the score, and squad totals are never computed from it.</div>';
+  let h='<div class="teams">'+T.map(t=>'<div class="team '+(t.o==="K"?"sq-a":t.o==="L"?"sq-b":"sq-c")+'"><div class="tn">'+NAMES[t.o]+'</div><div class="score">'+t.tot+'</div><div class="meta">'+t.n+'/15 &middot; '+t.A+' A-grade</div></div>').join("")+'</div>';
+  h+='<div class="note"><b>These are three real squads from a live draft league, kept as worked examples.</b> They are here so you can see every tool in this app running against a full, real team before you link your own on the My Team tab. Totals from draft night: Manager A 1001, Manager B 830, Manager C 807. One metric everywhere in this app now: the draft value score (70% projected points, 20% minutes certainty, 10% ceiling and edge). This matches draft night exactly. The raw points index still appears per player as reference only; it is one input to the score, not the score, and squad totals are never computed from it.</div>';
   ["K","J","L"].forEach(o=>{
     h+='<div class="sec">'+NAMES[o]+'</div>';
     P.filter(x=>x.o===o).sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.v-a.v).forEach(x=>{h+=rowHtml(x,false)});
@@ -343,7 +348,7 @@ function fixturesView(){
   h+='<div class="card"><div class="lbl">Gameweek notes</div>';
   GWNOTES.forEach(g=>{h+='<div style="margin-bottom:8px;"><div style="font-size:13px;font-weight:600;">'+g[0]+'</div><div style="font-size:12.5px;color:var(--sub);line-height:1.5;">'+g[1]+'</div></div>'});
   h+='</div>';
-  h+='<div class="note">Season opener 23 August, GW1 deadline Friday 21 August. Window closes 1 September, so re-check any player in transfer talk before each of the first three deadlines. Ratings and notes from the fixture model dated 5 August; The GW Plan tab now uses live official fixture difficulty for every gameweek; this page remains the narrative read on the opening runs.</div>';
+  h+='<div class="note">Season opens Friday 21 August, first kick-off 20:00 UK, with GW1 running to Monday 24 August. The GW1 deadline is 18:30 UK that Friday. Window closes 1 September, so re-check any player in transfer talk before each of the first three deadlines. Ratings and notes from the fixture model dated 5 August; The GW Plan tab now uses live official fixture difficulty for every gameweek; this page remains the narrative read on the opening runs.</div>';
   return h;
 }
 let planTeam="K",gwSel=META.gw||1,expanded=null;
@@ -537,7 +542,7 @@ function bestPicksView(){
   h+='</div>';
   return h;
 }
-// ---- Player Comparison (phase 6, Leo's spec) ----
+// ---- Player Comparison (phase 6) ----
 let CMP=[],cmpQ="",cmpPick=false;
 function cmpAdd(n){if(CMP.length<4&&!CMP.includes(n))CMP.push(n);cmpPick=false;cmpQ="";render();}
 function cmpClear(){CMP=[];render();}
