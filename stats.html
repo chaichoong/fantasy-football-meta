@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Visits · Fantasy Football Meta</title>
+<style>
+:root{--bg:#101418;--card:#1a2026;--card2:#20272e;--line:#2b333c;--txt:#e8ebee;--sub:#8b96a0;--a:#4cc38a;--b:#5aa9f0;--c:#6b7680;--warn:#e0a84c;--danger:#e08a76;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:15px;padding:12px;max-width:600px;margin:0 auto;line-height:1.55;}
+h1{font-size:19px;font-weight:600;margin-bottom:4px;}
+.lede{font-size:13.5px;color:var(--sub);margin-bottom:14px;}
+.back{display:inline-block;background:var(--card2);border:1px solid #3d4854;color:var(--txt);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;text-decoration:none;margin-bottom:16px;}
+h2{font-size:15.5px;font-weight:600;margin:22px 0 8px;padding-top:14px;border-top:1px solid var(--line);}
+h2:first-of-type{border-top:none;padding-top:0;}
+h3{font-size:13.5px;font-weight:600;margin:14px 0 4px;}
+p{font-size:14px;margin-bottom:9px;}
+ul{margin:0 0 10px 18px;}
+li{font-size:14px;margin-bottom:6px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:11px;}
+.card .lbl{font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
+.formula{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13.5px;font-weight:600;text-align:center;margin:10px 0;line-height:1.7;}
+.sub{color:var(--sub);font-size:13px;}
+b{font-weight:600;}
+.grade{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;margin-right:5px;}
+.gA{background:rgba(76,195,138,.15);color:var(--a);}
+.gB{background:rgba(90,169,240,.15);color:var(--b);}
+.gC{background:rgba(107,118,128,.2);color:var(--c);}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px;}
+th,td{text-align:left;padding:6px 6px 6px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+th{color:var(--sub);font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;font-weight:600;}
+.warn{border-color:rgba(224,168,76,.4);}
+.warn .lbl{color:var(--warn);}
+.foot{font-size:12.5px;color:var(--sub);margin:20px 0 30px;}
+</style>
+<style>
+.big{font-size:30px;font-weight:700;line-height:1.1;}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.bar{height:8px;background:var(--card2);border-radius:4px;overflow:hidden;margin-top:3px;}
+.bar i{display:block;height:100%;background:var(--a);}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line);}
+.row:last-child{border-bottom:none;}
+.mut{color:var(--sub);}
+</style>
+</head>
+<body>
+<h1>Who has actually turned up</h1>
+<p class="lede">Both sites, last 14 days. Updates within a minute of a visit.</p>
+
+<a class="back" href="index.html">&larr; Back to the app</a>
+
+<div id="out"><p class="sub">Loading&hellip;</p></div>
+
+<div class="card" style="margin-top:14px;">
+<div class="lbl">What the two numbers mean</div>
+<p class="sub"><b>Visits</b> is how many times a page was opened. <b>Used it</b> is how many of those did something once they arrived, rather than landing and leaving. The gap between them is the interesting bit.</p>
+<p class="sub">Family and your own testing count too. Take your own visits off before you believe a number.</p>
+</div>
+
+<p class="foot">No cookies, nothing stored on anyone's device, nothing that identifies a person. Just a number going up.</p>
+
+<script>
+var SITES = [
+  { key: "ffm",      name: "Fantasy Football Meta" },
+  { key: "sellmate", name: "SellMate" }
+];
+
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+  return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]; }); }
+
+fetch("https://fpl-relay.kevinbrittain.workers.dev/stats")
+  .then(function (r) { return r.json(); })
+  .then(function (d) {
+    var h = "";
+    SITES.forEach(function (s) {
+      var rec = d.sites[s.key];
+      if (!rec) return;
+      var visits = rec.byEvent.visit || 0;
+      var used   = rec.byEvent.action || 0;
+      h += '<h2>' + esc(s.name) + '</h2>';
+      h += '<div class="two">';
+      h += '<div class="card"><div class="lbl">Visits</div><div class="big">' + visits + '</div></div>';
+      h += '<div class="card"><div class="lbl">Used it</div><div class="big">' + used + '</div></div>';
+      h += '</div>';
+
+      var days = Object.keys(rec.byDay).sort().reverse();
+      var peak = 0;
+      days.forEach(function (day) { if (rec.byDay[day] > peak) peak = rec.byDay[day]; });
+
+      h += '<div class="card"><div class="lbl">Day by day</div>';
+      days.forEach(function (day) {
+        var n = rec.byDay[day] || 0;
+        var pct = peak ? Math.round((n / peak) * 100) : 0;
+        h += '<div class="row"><span class="mut">' + esc(day) + '</span><span><b>' + n + '</b></span></div>';
+        h += '<div class="bar"><i style="width:' + pct + '%"></i></div>';
+      });
+      h += '</div>';
+      if (rec.capped) {
+        h += '<div class="card warn"><div class="lbl">Note</div><p class="sub">A day hit the 1000-a-day counting limit, so the real number is higher. That is a good problem.</p></div>';
+      }
+    });
+    document.getElementById("out").innerHTML = h;
+  })
+  .catch(function () {
+    document.getElementById("out").innerHTML =
+      '<div class="card warn"><div class="lbl">Could not load</div>' +
+      '<p class="sub">The counter did not answer. The sites are unaffected. Try again in a minute.</p></div>';
+  });
+</script>
+
+<a class="back" href="index.html">&larr; Back to the app</a>
+</body>
+</html>

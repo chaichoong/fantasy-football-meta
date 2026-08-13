@@ -15,12 +15,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Stamp content hash onto asset URLs
         run: |
-          VER=$(cat js/data.js js/app.js css/app.css | md5sum | cut -c1-8)
+          VER=$(cat js/data.js js/app.js js/count.js css/app.css | md5sum | cut -c1-8)
           sed -i -E "s@(href=\"css/app\.css)(\?v=[a-f0-9]+)?\"@\1?v=$VER\"@" index.html
           sed -i -E "s@(src=\"js/data\.js)(\?v=[a-f0-9]+)?\"@\1?v=$VER\"@" index.html
           sed -i -E "s@(src=\"js/app\.js)(\?v=[a-f0-9]+)?\"@\1?v=$VER\"@" index.html
-          if git diff --quiet index.html; then echo "already current: $VER"; exit 0; fi
+          # count.js is loaded by index.html AND how-it-works.html, so both get stamped.
+          sed -i -E "s@(src=\"js/count\.js)(\?v=[a-f0-9]+)?\"@\1?v=$VER\"@" index.html how-it-works.html
+          if git diff --quiet index.html how-it-works.html; then echo "already current: $VER"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -am "Stamp asset version $VER [skip ci]"
+          git add index.html how-it-works.html
+          git commit -m "Stamp asset version $VER [skip ci]"
           git push

@@ -11,3 +11,10 @@ workers_dev = true
 [[kv_namespaces]]
 binding = "PREDICTIONS"
 id = "d8a8e65a14de4cd8a78a7b8c7fdb2b10"
+
+# Visit counts for both family sites. Deliberately a SEPARATE namespace from
+# PREDICTIONS: /hit is an open write endpoint, and a flood of visits must never be
+# able to disturb the price-change history, which is the one thing we cannot rebuild.
+[[kv_namespaces]]
+binding = "STATS"
+id = "6e9619b8eea74b8a9c4f9f0b45d4e85e"

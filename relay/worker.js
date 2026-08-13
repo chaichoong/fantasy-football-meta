@@ -9,6 +9,12 @@
 // immutable at the deadline: no write is accepted for a gameweek whose deadline
 // has passed, so the accuracy record can never be quietly rewritten.
 const UPSTREAM = "https://fantasy.premierleague.com/api";
+
+// Visit-counter vocabulary. Both allowlists are closed on purpose: /hit writes to
+// storage from the open internet, so it accepts these values and silently ignores
+// everything else rather than letting a stranger choose our key names.
+const STAT_SITES = ["ffm", "sellmate"];
+const STAT_EVENTS = ["visit", "action", "return"];
 const CACHE_SECS = 900;
 const SNAP_WINDOW_MS = 2 * 60 * 60 * 1000; // start snapshotting 2h before deadline
 
@@ -189,7 +195,62 @@ export default {
         return jsonResp({ error: String(e.message || e) }, 502);
       }
     }
-    return jsonResp({ error: "not found", routes: ["/bootstrap", "/fixtures", "/live", "/entry", "/picks", "/snapshots", "/snapshot", "/pricechanges", "/snap"] }, 404);
+    // ── Visit counter ──────────────────────────────────────────────────
+    // Counts arrivals and key actions for BOTH family sites. No cookies, no
+    // fingerprint, no IP stored, nothing that identifies a person, so it needs
+    // no consent banner and carries no data-protection weight.
+    //
+    // Writes land in the STATS namespace, never PREDICTIONS, so a flood here can
+    // never disturb the price-change history, which is the only data we cannot
+    // rebuild.
+    if (p === "/hit") {
+      const site = url.searchParams.get("s");
+      const event = url.searchParams.get("e") || "visit";
+      // Strict allowlists. This endpoint writes to storage from the open
+      // internet, so it accepts a fixed vocabulary and nothing else.
+      if (!STAT_SITES.includes(site)) return new Response(null, { status: 204, headers: CORS });
+      if (!STAT_EVENTS.includes(event)) return new Response(null, { status: 204, headers: CORS });
+
+      const day = new Date().toISOString().slice(0, 10);
+      const dayPrefix = "hit:" + site + ":" + day + ":";
+      // Daily write cap. list() is a read, not a write, so this costs nothing
+      // meaningful and bounds a bad day to about 1000 writes per site.
+      const today = await env.STATS.list({ prefix: dayPrefix, limit: 1000 });
+      if (!today.list_complete) return new Response(null, { status: 204, headers: CORS });
+
+      // One key per hit rather than a counter: KV read-modify-write races and
+      // silently loses counts, and at this scale an exact number matters more
+      // than the write volume. The event name lives IN the key because list()
+      // returns key names only, never values.
+      const key = dayPrefix + event + ":" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+      ctx.waitUntil(env.STATS.put(key, "1", { expirationTtl: 60 * 60 * 24 * 90 }));
+      return new Response(null, { status: 204, headers: CORS });
+    }
+    if (p === "/stats") {
+      const days = [];
+      const now = Date.now();
+      for (let i = 0; i < 14; i++) {
+        days.push(new Date(now - i * 86400000).toISOString().slice(0, 10));
+      }
+      const out = {};
+      for (const site of STAT_SITES) {
+        const rec = { total: 0, byDay: {}, byEvent: {}, capped: false };
+        for (const day of days) {
+          const res = await env.STATS.list({ prefix: "hit:" + site + ":" + day + ":", limit: 1000 });
+          rec.byDay[day] = res.keys.length;
+          rec.total += res.keys.length;
+          if (!res.list_complete) rec.capped = true;
+          for (const k of res.keys) {
+            // hit:<site>:<day>:<event>:<unique>
+            const ev = k.name.split(":")[3] || "unknown";
+            rec.byEvent[ev] = (rec.byEvent[ev] || 0) + 1;
+          }
+        }
+        out[site] = rec;
+      }
+      return jsonResp({ since: days[days.length - 1], until: days[0], sites: out });
+    }
+    return jsonResp({ error: "not found", routes: ["/bootstrap", "/fixtures", "/live", "/entry", "/picks", "/snapshots", "/snapshot", "/pricechanges", "/snap", "/hit", "/stats"] }, 404);
   },
 
   async scheduled(event, env, ctx) {

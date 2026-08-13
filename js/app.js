@@ -260,7 +260,10 @@ const GWNOTES=[
 ["GW4","Manchester derby: bench or expect little from Utd assets. Chelsea's best matchup of the run: Palmer's week. Sunderland's collapse begins at Arsenal."],
 ["GW5","City home to Sunderland: Haaland window three. Forest home to Coventry: Gibbs-White's best week. Hull still winless on fixtures."]];
 const TEAMCOL={MCI:"#6CABDD",ARS:"#EF4135",LIV:"#C8102E",MUN:"#DA291C",CHE:"#4D7BD6",TOT:"#8CA6C0",NEW:"#9BA7B2",AVL:"#95BFE5",BHA:"#4B9AE0",BOU:"#DA291C",BRE:"#E30613",CRY:"#4B71C9",EVE:"#5B8DDB",FUL:"#B8B8B8",LEE:"#FFCD00",NFO:"#DD3333",SUN:"#EB4B5F",COV:"#78D0F3",HUL:"#F5971D",IPS:"#5A84C4"};
-const NAMES={K:"Kevin",L:"Leo",J:"James",F:"Free"};
+// Display labels for the three drafted squads. Deliberately generic: this is a public
+// product, and the people behind the draft are not part of what a visitor needs to know.
+// The K/L/J keys stay as-is so every lookup elsewhere keeps working.
+const NAMES={K:"Manager A",L:"Manager C",J:"Manager B",F:"Free"};
 const ORDER={F:1,M:2,D:3,G:4};
 const POSNAME={F:"FW",M:"MID",D:"DEF",G:"GK"};
 // System grade from season points index, per position bands (free agents only; drafted players keep curated grades)
@@ -306,7 +309,7 @@ function squadTotal(o){return P.filter(x=>x.o===o).reduce((s,x)=>s+x.v,0)}
 function squadsView(){
   const T=["K","J","L"].map(o=>({o,tot:squadTotal(o),n:P.filter(x=>x.o===o).length,A:P.filter(x=>x.o===o&&x.g==="A").length}));
   let h='<div class="teams">'+T.map(t=>'<div class="team '+(t.o==="K"?"kev":t.o==="L"?"leo":"jam")+'"><div class="tn">'+NAMES[t.o]+'</div><div class="score">'+t.tot+'</div><div class="meta">'+t.n+'/15 &middot; '+t.A+' A-grade</div></div>').join("")+'</div>';
-  h+='<div class="note"><b>Kevin 1001, James 830, Leo 807.</b> One metric everywhere in this app now: the draft value score (70% projected points, 20% minutes certainty, 10% ceiling and edge). This matches draft night exactly. The raw points index still appears per player as reference only; it is one input to the score, not the score, and squad totals are never computed from it.</div>';
+  h+='<div class="note"><b>Manager A 1001, Manager B 830, Manager C 807.</b> One metric everywhere in this app now: the draft value score (70% projected points, 20% minutes certainty, 10% ceiling and edge). This matches draft night exactly. The raw points index still appears per player as reference only; it is one input to the score, not the score, and squad totals are never computed from it.</div>';
   ["K","J","L"].forEach(o=>{
     h+='<div class="sec">'+NAMES[o]+'</div>';
     P.filter(x=>x.o===o).sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.v-a.v).forEach(x=>{h+=rowHtml(x,false)});
@@ -497,7 +500,7 @@ function bestPicksView(){
   const squadNames=bpSource==="B"?squadFlat():P.filter(x=>x.o===bpSource).map(x=>x.n);
   const squad=squadNames.map(n=>P.find(y=>y.n===n)).filter(Boolean);
   let h='<div class="note"><b>What should I actually do?</b> One screen, six decisions, every one with a confidence percentage and a reason. Confidence is how much the model trusts its own number, not how good the player is: it comes from minutes certainty, whether the signals agree, and how much data exists yet.</div>';
-  h+='<select onchange="bpSource=this.value;render()">'+[["K","Kevin\'s squad"],["L","Leo\'s squad"],["J","James\'s squad"],["B","My built squad"]].map(o=>'<option value="'+o[0]+'"'+(bpSource===o[0]?" selected":"")+'>'+o[1]+'</option>').join("")+'</select>';
+  h+='<select onchange="bpSource=this.value;render()">'+[["K","Manager A\'s squad"],["L","Manager C\'s squad"],["J","Manager B\'s squad"],["B","My built squad"]].map(o=>'<option value="'+o[0]+'"'+(bpSource===o[0]?" selected":"")+'>'+o[1]+'</option>').join("")+'</select>';
   if(!squad.length)return h+'<div class="card"><div style="font-size:13px;">That squad is empty. Build one on the Builder tab first.</div></div>';
   const capt=squad.slice().sort((a,b)=>predPts(b)-predPts(a)).slice(0,3);
   h+='<div class="card"><div class="lbl">&#128081; Captain</div>';
