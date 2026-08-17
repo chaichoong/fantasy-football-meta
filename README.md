@@ -2,7 +2,7 @@
 
 **Make smarter moves.**
 
-A fantasy football decision engine: predicted points, Meta ratings, transfer calls and a public accuracy record. Also carries the private 3-manager draft league it grew out of.
+A fantasy football decision engine: predicted points, Meta ratings, transfer calls and a public accuracy record.
 
 - **Squads** — the three drafted teams with value scores and grades
 - **Players** — ~319 scored players, filterable, with a "free agents only" toggle

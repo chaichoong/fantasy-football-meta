@@ -188,6 +188,25 @@ settled first, and two are commercial calls only Kevin can make:
 Until 1 and 2 are cleared, the honest position is what the sidebar now says: free and open,
 no paid tier, nothing to buy.
 
+## Draft-league system REMOVED (13 Aug 2026, Leo's call)
+
+The three-manager draft league the product grew out of is gone from the site: the Draft
+Squads section, the draft-league GW Plan (with its waiver list), per-player ownership
+badges, the "Free only" filter, and the `OWNER`/`NAMES` maps in the data. This also
+completed the pre-launch cleanup of family names and squads from a public repo.
+
+Consequences worth knowing:
+- **Best Picks and the Dashboard now resolve ONE squad automatically** via `trSquad()`:
+  the linked FPL team if there is one, otherwise the Squad Builder squad. With neither,
+  they show a link-your-team prompt and the dashboard falls back to "Top predicted".
+- **The availability override (Fit/Doubt/Out) moved to the player profile.** It only
+  existed inside the deleted planner; losing it would have removed the ability to overrule
+  the feed. `setInj()` replaces `cycleInj()`.
+- **Language changed everywhere**: "draft projection" is now "season projection",
+  "draft value" is "baseline quality". `VAL`/`GRC` remain as curated baseline ratings for
+  45 players; consider normalising them so every player is rated by the same formula.
+- Player records no longer carry an `o` (owner) property at all.
+
 ## Parked (good ideas, wrong time)
 
 - **Machine-learning models (XGBoost etc.)** — needs historical training data we do not

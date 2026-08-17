@@ -71,6 +71,7 @@ async function loadLive(){
   render();
 }
 function statusOf(n){return INJ[n]!==undefined?INJ[n]:(LIVESTAT[n]!==undefined?LIVESTAT[n]:0)}
+function setInj(n,val){const live=LIVESTAT[n]!==undefined?LIVESTAT[n]:0;if(val===live)delete INJ[n];else INJ[n]=val;saveInj();render();}
 // ---- Prediction model V1 (phase 3) ----
 // Predicted GW points = blended base x fixture x availability x momentum.
 // Base blends up to three signals, weights renormalised over whichever exist:
@@ -79,7 +80,7 @@ function statusOf(n){return INJ[n]!==undefined?INJ[n]:(LIVESTAT[n]!==undefined?L
 // until real matches are played. All factors are shown per player in the planner.
 function predParts(x){
   const L=LIVEEL[x.n]||{};
-  const sig=[["Draft projection",0.4,x.pts/38]];
+  const sig=[["Season projection",0.4,x.pts/38]];
   if(L.form>0)sig.push(["Live form",0.3,L.form]);
   if(L.ep>0)sig.push(["FPL expected",0.3,L.ep]);
   const wsum=sig.reduce((s,c)=>s+c[1],0);
@@ -268,7 +269,6 @@ const TEAMCOL={MCI:"#6CABDD",ARS:"#EF4135",LIV:"#C8102E",MUN:"#DA291C",CHE:"#4D7
 // Display labels for the three drafted squads. Deliberately generic: this is a public
 // product, and the people behind the draft are not part of what a visitor needs to know.
 // The K/L/J keys stay as-is so every lookup elsewhere keeps working.
-const NAMES={K:"Manager A",L:"Manager C",J:"Manager B",F:"Free"};
 const ORDER={F:1,M:2,D:3,G:4};
 const POSNAME={F:"FW",M:"MID",D:"DEF",G:"GK"};
 // System grade from season points index, per position bands (free agents only; drafted players keep curated grades)
@@ -278,16 +278,16 @@ function grade(p,pts){
   if(p==="D")return pts>=160?"A":pts>=115?"B":"C";
   return pts>=155?"A":pts>=125?"B":"C";
 }
-const P=D.map((a,i)=>({n:a[0],t:a[1],p:a[2],pts:a[3],pp:a[4],g:GRC[a[0]]||grade(a[2],a[3]),v:VAL[a[0]]!==undefined?VAL[a[0]]:Math.round(a[3]/2.2),o:OWNER[a[0]]||"F",gw:GW[a[0]]||null}));
+const P=D.map((a,i)=>({n:a[0],t:a[1],p:a[2],pts:a[3],pp:a[4],g:GRC[a[0]]||grade(a[2],a[3]),v:VAL[a[0]]!==undefined?VAL[a[0]]:Math.round(a[3]/2.2),gw:GW[a[0]]||null}));
 P.sort((a,b)=>b.v-a.v||b.pts-a.pts);P.forEach((x,i)=>x.r=i+1);
 function fxOf(t){
   if(LIVEFX&&LIVEFX[t]){const m=LIVEFX[t][gwSel]||0;return m>=1.25?5:m>=1.1?4:m>=0.95?3:m>=0.75?2:1;}
   const f=FIX.find(x=>x[0]===t);return f?f[1]:3;
 }
 function early(x){return x.gw!==null?x.gw:+(x.pts*0.115).toFixed(1)}
-let tab="dash",posF="ALL",ownF="ALL",q="",sortMode="val";
+let tab="dash",posF="ALL",q="",sortMode="val";
 function esc(s){return s.replace(/'/g,"\\'")}
-const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",transfers:"Transfer Planner",prices:"Price Changes",sync:"Devices",planner:"Gameweek Plan",squads:"Draft Squads",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
+const TITLES={dash:"Dashboard",picks:"Best Picks",players:"Players",compare:"Player Comparison",builder:"Squad Builder",myteam:"My Team",transfers:"Transfer Planner",prices:"Price Changes",sync:"Devices",fixtures:"Fixtures",news:"Team News",accuracy:"Model Accuracy"};
 function render(){
   updateStrip();
   const pt=document.getElementById("pageTitle");
@@ -295,10 +295,8 @@ function render(){
   if(FOCUS){document.getElementById("view").innerHTML=playerView();document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("on"));return;}
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
   const v=document.getElementById("view");
-  if(tab==="squads")return v.innerHTML=squadsView();
   if(tab==="players")return v.innerHTML=playersView();
   if(tab==="fixtures")return v.innerHTML=fixturesView();
-  if(tab==="planner")return v.innerHTML=plannerView();
   if(tab==="accuracy")return v.innerHTML=accuracyView();
   if(tab==="builder")return v.innerHTML=builderView();
   if(tab==="dash")return v.innerHTML=dashView();
@@ -310,31 +308,20 @@ function render(){
   if(tab==="picks")return v.innerHTML=bestPicksView();
   if(tab==="compare")return v.innerHTML=compareView();
 }
-function squadTotal(o){return P.filter(x=>x.o===o).reduce((s,x)=>s+x.v,0)}
-function squadsView(){
-  const T=["K","J","L"].map(o=>({o,tot:squadTotal(o),n:P.filter(x=>x.o===o).length,A:P.filter(x=>x.o===o&&x.g==="A").length}));
-  let h='<div class="teams">'+T.map(t=>'<div class="team '+(t.o==="K"?"sq-a":t.o==="L"?"sq-b":"sq-c")+'"><div class="tn">'+NAMES[t.o]+'</div><div class="score">'+t.tot+'</div><div class="meta">'+t.n+'/15 &middot; '+t.A+' A-grade</div></div>').join("")+'</div>';
-  h+='<div class="note"><b>These are three real squads from a live draft league, kept as worked examples.</b> They are here so you can see every tool in this app running against a full, real team before you link your own on the My Team tab. Totals from draft night: Manager A 1001, Manager B 830, Manager C 807. One metric everywhere in this app now: the draft value score (70% projected points, 20% minutes certainty, 10% ceiling and edge). This matches draft night exactly. The raw points index still appears per player as reference only; it is one input to the score, not the score, and squad totals are never computed from it.</div>';
-  ["K","J","L"].forEach(o=>{
-    h+='<div class="sec">'+NAMES[o]+'</div>';
-    P.filter(x=>x.o===o).sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.v-a.v).forEach(x=>{h+=rowHtml(x,false)});
-  });
-  return h;
-}
-function rowHtml(x,showOwner){
+function rowHtml(x,showChip){
   const st=statusOf(x.n);
   const flag=st===2?'<span style="font-size:10px;font-weight:700;color:var(--danger);flex-shrink:0;">OUT</span>':(CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'');
-  const club=showOwner?'<span class="tc" style="background:'+(TEAMCOL[x.t]||'#888')+'22;color:'+(TEAMCOL[x.t]||'#aaa')+';">'+x.t+'</span>':'';
+  const club=showChip?'<span class="tc" style="background:'+(TEAMCOL[x.t]||'#888')+'22;color:'+(TEAMCOL[x.t]||'#aaa')+';">'+x.t+'</span>':'';
   const open=' style="cursor:pointer;" onclick="openPlayer(\''+esc(x.n)+'\')"';
-  const small=(showOwner?'':x.t+' ')+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'');
-  return '<div class="row"'+open+'><span class="rk">'+x.r+'</span><span class="gr '+x.g+'">'+x.g+'</span>'+club+'<span class="pn">'+x.n+'<small>'+small+'</small></span>'+flag+'<span class="val">'+x.v+' &middot; '+x.pp.toFixed(1)+'</span>'+(showOwner?'<span class="own '+x.o+'">'+(x.o==="F"?"Free":NAMES[x.o])+'</span>':'')+'</div>';
+  const small=(showChip?'':x.t+' ')+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'');
+  return '<div class="row"'+open+'><span class="rk">'+x.r+'</span><span class="gr '+x.g+'">'+x.g+'</span>'+club+'<span class="pn">'+x.n+'<small>'+small+'</small></span>'+flag+'<span class="val">'+x.v+' &middot; '+x.pp.toFixed(1)+'</span></div>';
 }
 function playersView(){
   let h='<input type="text" id="srch" placeholder="Search player or team" value="'+q+'" oninput="q=this.value;render();document.getElementById(\'srch\').focus();const el=document.getElementById(\'srch\');el.setSelectionRange(el.value.length,el.value.length);">';
-  h+='<div class="filters">'+["ALL","F","M","D","G"].map(p=>'<button onclick="posF=\''+p+'\';render()" class="'+(posF===p?"on":"")+'">'+(p==="ALL"?"All":POSNAME[p])+'</button>').join("")+'<button onclick="ownF=ownF===\'F\'?\'ALL\':\'F\';render()" class="'+(ownF==="F"?"on":"")+'">Free only</button></div>';
+  h+='<div class="filters">'+["ALL","F","M","D","G"].map(p=>'<button onclick="posF=\''+p+'\';render()" class="'+(posF===p?"on":"")+'">'+(p==="ALL"?"All":POSNAME[p])+'</button>').join("")+'</div>';
   h+='<div class="filters">'+[["val","Score"],["pred","Pred pts"],["price","Price"],["vpm","&pound; value"],["pp","PP/90"],["start","Start %"]].map(s=>'<button onclick="sortMode=\''+s[0]+'\';render()" class="'+(sortMode===s[0]?"on":"")+'">'+s[1]+'</button>').join("")+'</div>';
   h+='<div class="note">Score column: draft value &middot; points per 90. Prices and injury flags are live from the official feed. Sort by Score, Price, &pound; value (value per million), PP/90 or Start %. '+P.length+' players covered.</div>';
-  let rows=P.filter(x=>!x.ext&&(posF==="ALL"||x.p===posF)&&(ownF==="ALL"||x.o==="F")&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
+  let rows=P.filter(x=>!x.ext&&(posF==="ALL"||x.p===posF)&&(q===""||x.n.toLowerCase().includes(q.toLowerCase())||x.t.toLowerCase().includes(q.toLowerCase())));
   const sortKey={val:x=>x.v,pred:x=>predPts(x),price:x=>PRICE[x.n]||0,vpm:x=>PRICE[x.n]?x.v/PRICE[x.n]:0,pp:x=>x.pp,start:x=>startProb(x)}[sortMode];
   rows=rows.slice().sort((a,b)=>sortKey(b)-sortKey(a)||b.v-a.v);
   if(posF==="ALL"){rows.slice(0,260).forEach(x=>h+=rowHtml(x,true));}
@@ -351,7 +338,7 @@ function fixturesView(){
   h+='<div class="note">Season opens Friday 21 August, first kick-off 20:00 UK, with GW1 running to Monday 24 August. The GW1 deadline is 18:30 UK that Friday. Window closes 1 September, so re-check any player in transfer talk before each of the first three deadlines. Ratings and notes from the fixture model dated 5 August; The GW Plan tab now uses live official fixture difficulty for every gameweek; this page remains the narrative read on the opening runs.</div>';
   return h;
 }
-let planTeam="K",gwSel=META.gw||1,expanded=null;
+let gwSel=META.gw||1,expanded=null;
 // ---- Squad Builder (phase 5) ----
 const CAPS={G:2,D:5,M:5,F:3};
 let SQUAD={G:[],D:[],M:[],F:[]};
@@ -494,7 +481,6 @@ function pickerHtml(){
   return h+'</div>';
 }
 // ---- Best Picks (phase 6): the decision engine ----
-let bpSource="K";
 function ceilingOf(x){return x.pp*fxMult(x.t)*(statusOf(x.n)===2?0:1);}
 function pickRow(x,extra,click){
   const c=confidenceOf(x);
@@ -502,11 +488,12 @@ function pickRow(x,extra,click){
 }
 function bestPicksView(){
   if(!LIVEOK)return '<div class="card"><div class="lbl">Needs live data</div><div style="font-size:13px;">Best Picks uses live prices, form and team news. '+(liveTries>3?"Tap a tab to retry.":"Connecting&hellip;")+'</div></div>';
-  const squadNames=bpSource==="B"?squadFlat():P.filter(x=>x.o===bpSource).map(x=>x.n);
-  const squad=squadNames.map(n=>P.find(y=>y.n===n)).filter(Boolean);
+  const sq=trSquad();
+  const squad=sq.players;
+  const squadNames=squad.map(x=>x.n);
   let h='<div class="note"><b>What should I actually do?</b> One screen, six decisions, every one with a confidence percentage and a reason. Confidence is how much the model trusts its own number, not how good the player is: it comes from minutes certainty, whether the signals agree, and how much data exists yet.</div>';
-  h+='<select onchange="bpSource=this.value;render()">'+[["K","Manager A\'s squad"],["L","Manager C\'s squad"],["J","Manager B\'s squad"],["B","My built squad"]].map(o=>'<option value="'+o[0]+'"'+(bpSource===o[0]?" selected":"")+'>'+o[1]+'</option>').join("")+'</select>';
-  if(!squad.length)return h+'<div class="card"><div style="font-size:13px;">That squad is empty. Build one on the Builder tab first.</div></div>';
+  if(!squad.length)return h+'<div class="card"><div class="lbl">No squad yet</div><div style="font-size:13px;line-height:1.6;">Link your real team on <b>My Team</b>, or build one in the <b>Squad Builder</b>, and this becomes your weekly decision sheet.</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" onclick="tab=\'myteam\';render()">Link my team</button><button class="btn ghost" onclick="tab=\'builder\';render()">Open Squad Builder</button></div></div>';
+  h+='<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Working from <b style="color:var(--txt);">'+(sq.src==="myteam"?"your linked FPL team":"the squad you built")+'</b>.</div>';
   const capt=squad.slice().sort((a,b)=>predPts(b)-predPts(a)).slice(0,3);
   h+='<div class="card"><div class="lbl">&#128081; Captain</div>';
   capt.forEach((x,i)=>{h+=pickRow(x,i===0?'ceiling '+ceilingOf(x).toFixed(1)+' pts':null,"CMP=['"+esc(x.n)+"'];findAlternatives();tab='compare';render()")});
@@ -519,7 +506,7 @@ function bestPicksView(){
   warn.slice(0,5).forEach(r=>{h+=pickRow(r.x,r.c.risk[0]||r.c.band.toLowerCase()+" confidence")});
   h+='</div>';
   const owned=new Set(squadNames);
-  const targets=poolPlayers().filter(x=>!owned.has(x.n)&&(bpSource==="B"||x.o==="F")).sort((a,b)=>metaOf(b.n)-metaOf(a.n)).slice(0,5);
+  const targets=poolPlayers().filter(x=>!owned.has(x.n)).sort((a,b)=>metaOf(b.n)-metaOf(a.n)).slice(0,5);
   const weakest=squad.slice().sort((a,b)=>metaOf(a.n)-metaOf(b.n))[0];
   h+='<div class="card"><div class="lbl">&#128260; Best transfer in</div>';
   targets.forEach(x=>{h+=pickRow(x,"Meta "+metaOf(x.n),"CMP=['"+esc(x.n)+"','"+esc(weakest?weakest.n:x.n)+"'];tab='compare';render()")});
@@ -630,7 +617,7 @@ function playerView(){
   // Header
   h+='<div class="card"><div style="display:flex;align-items:center;gap:10px;">';
   h+='<div style="width:46px;height:46px;border-radius:10px;background:'+(TEAMCOL[x.t]||"#888")+'22;color:'+(TEAMCOL[x.t]||"#aaa")+';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;">'+x.t+'</div>';
-  h+='<div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:700;">'+x.n+'</div><div style="font-size:12px;color:var(--sub);">'+POSNAME[x.p]+' &middot; &pound;'+(PRICE[x.n]||0).toFixed(1)+'m &middot; '+(OWN[x.n]||0).toFixed(1)+'% owned &middot; '+(x.o==="F"?"undrafted":NAMES[x.o]+"'s")+'</div></div>';
+  h+='<div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:700;">'+x.n+'</div><div style="font-size:12px;color:var(--sub);">'+POSNAME[x.p]+' &middot; &pound;'+(PRICE[x.n]||0).toFixed(1)+'m &middot; '+(OWN[x.n]||0).toFixed(1)+'% owned</div></div>';
   h+='<div style="text-align:right;"><div style="font-size:24px;font-weight:800;color:var(--a);line-height:1;">'+m.total+'</div><div style="font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;">Meta</div></div>';
   h+='</div>';
   h+='<div style="display:flex;gap:8px;margin-top:10px;">';
@@ -668,6 +655,13 @@ function playerView(){
     h+='<div class="row"><span class="rk">GW'+g+'</span><span class="pn">'+starsFor(mm)+(mm>1.5?' <span style="font-size:10px;color:var(--a);">double</span>':'')+'</span><span class="val">'+pp.toFixed(1)+'</span></div>';
   }
   h+='<div style="font-size:11.5px;color:var(--sub);margin-top:6px;">Stars are that club\'s fixture difficulty; the number is his predicted points that week.</div></div>';
+  const st=statusOf(x.n);
+  h+='<div class="card"><div class="lbl">Availability</div><div style="display:flex;gap:6px;">';
+  ["Fit","Doubt","Out"].forEach((lab,idx)=>{
+    const on=st===idx;
+    h+='<button onclick="setInj(\''+esc(x.n)+'\','+idx+')" style="flex:1;border:1px solid '+(on?"var(--accent)":"var(--line)")+';background:'+(on?"var(--accent)":"transparent")+';color:'+(on?"#fff":"var(--sub)")+';border-radius:9px;padding:8px 0;font-size:12.5px;font-weight:700;">'+lab+'</button>';
+  });
+  h+='</div><div style="font-size:11.5px;color:var(--sub);margin-top:7px;">'+(INJ[x.n]!==undefined?'You have overridden the feed. Tap the value the feed reports to hand control back.':'Set automatically from the official feed.')+'</div></div>';
   // Actions
   h+='<div style="display:flex;gap:6px;">';
   h+='<button onclick="CMP=[\''+esc(x.n)+'\'];findAlternatives();tab=\'compare\';FOCUS=null;render()" style="flex:1;background:var(--card2);border:1px solid var(--a);color:var(--a);border-radius:8px;padding:9px 0;font-size:12.5px;font-weight:700;">Compare with alternatives</button>';
@@ -688,7 +682,7 @@ function ensurePlayer(id){
   if(!x){
     const pts=e.total_points||0;
     x={n:nm,t:TEAMSHORT[e.team]||"?",p:POSOF[e.element_type],pts:pts,pp:parseFloat(e.points_per_game)||0,
-       g:grade(POSOF[e.element_type],pts),v:Math.max(5,Math.round(pts/2.2)),o:"F",gw:null,r:"",ext:true};
+       g:grade(POSOF[e.element_type],pts),v:Math.max(5,Math.round(pts/2.2)),gw:null,r:"",ext:true};
     P.push(x);
     FPLID[nm]=id;
     PRICE[nm]=e.now_cost/10;
@@ -1071,7 +1065,7 @@ function donut(parts){
 function dashView(){
   if(!LIVEOK)return '<div class="card"><div class="lbl">Connecting</div><div style="font-size:13px;">Pulling live prices, injuries and fixtures from the official feed. '+(liveTries>3?"Tap a section to retry.":"One moment&hellip;")+'</div></div>';
   const g0=META.gw||1;
-  const squad=P.filter(x=>x.o===bpSource);
+  const squad=trSquad().players;
   let h='';
   // Hero row
   const capt=squad.slice().sort((a,b)=>predPts(b)-predPts(a))[0];
@@ -1080,10 +1074,13 @@ function dashView(){
   const riser=movers.length?movers[0]:poolPlayers().filter(x=>PRICE[x.n]).sort((a,b)=>(metaOf(b.n)/PRICE[b.n])-(metaOf(a.n)/PRICE[a.n]))[0];
   const risk=squad.slice().filter(x=>statusOf(x.n)<2).sort((a,b)=>startProb(a)-startProb(b))[0];
   h+='<div class="grid g4" style="margin-bottom:12px;">';
+  const topAll=poolPlayers().slice().sort((a,b)=>predPts(b)-predPts(a))[0];
   if(capt)h+=heroCard("Best captain",capt,predPts(capt).toFixed(1)+" pts",confidenceOf(capt).pct+"% confidence");
+  else if(topAll)h+=heroCard("Top predicted",topAll,predPts(topAll).toFixed(1)+" pts",confidenceOf(topAll).pct+"% confidence");
   if(diff)h+=heroCard("Best differential",diff,(OWN[diff.n]||0).toFixed(1)+"% owned","Meta "+metaOf(diff.n));
   if(riser)h+=heroCard(movers.length?"Biggest riser":"Best value",riser,movers.length?("+&pound;"+PRICEMOVE[riser.n].toFixed(1)+"m"):("Meta "+metaOf(riser.n)),movers.length?"price change this GW":"&pound;"+(PRICE[riser.n]||0).toFixed(1)+"m &middot; best Meta per &pound;m");
   if(risk)h+=heroCard("Biggest rotation risk",risk,Math.round(startProb(risk))+"% to start",confidenceOf(risk).risk[0]||"watch team news");
+  else h+='<div class="hero"><div class="tag">Your squad</div><div style="font-size:13px;line-height:1.5;margin-bottom:9px;">Link your FPL team and these cards become about your own players.</div><button class="btn" style="padding:7px 13px;font-size:12px;" onclick="tab=\'myteam\';render()">Link my team</button></div>';
   h+='</div>';
   h+='<div class="grid g3">';
   // Left column
@@ -1188,66 +1185,6 @@ function fxMult(t,g){
 }
 function predPtsAt(x,g){const s=gwSel;gwSel=g;const v=predPts(x);gwSel=s;return v;}
 function startProb(x){const s=statusOf(x.n);return s===2?0:(CHANCE[x.n]!=null?CHANCE[x.n]:(s===1?50:100));}
-function plannerView(){
-  let h='<div class="card"><div class="lbl">Data status</div><div style="font-size:13px;">Gameweek '+META.gw+' &middot; '+META.date+'</div>';
-  if(LIVEOK)h+='<div style="font-size:11.5px;color:var(--a);margin:2px 0 8px;">&#9679; Live: prices, injuries and fixture difficulty from the official FPL feed &middot; '+META.updated+'</div>';
-  else h+='<div style="font-size:11.5px;color:var(--warn);margin:2px 0 8px;">Live feed unreachable &mdash; using stored data ('+META.updated+'). Tap refresh to retry.</div>';
-  h+='<button id="refBtn" onclick="refreshLive()" style="width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px 0;font-size:13px;font-weight:600;margin-bottom:6px;">Refresh live data</button>';
-  h+='<textarea id="packBox" placeholder="Optional: paste a momentum data pack from Claude chat here" style="width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 10px;font-size:12px;height:52px;margin-bottom:6px;"></textarea>';
-  h+='<button onclick="applyPack(document.getElementById(\'packBox\').value)" style="width:100%;background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:8px;padding:8px 0;font-size:12.5px;font-weight:600;">Apply pack</button></div>';
-  h+='<select onchange="planTeam=this.value;render()">'+["K","L","J"].map(o=>'<option value="'+o+'"'+(planTeam===o?" selected":"")+'>'+NAMES[o]+"'s plan</option>").join("")+'</select>';
-  const gws=[];for(let g=Math.max(1,META.gw-1);g<=Math.min(38,META.gw+3);g++)gws.push(g);
-  h+='<div class="filters">'+gws.map(g=>'<button onclick="gwSel='+g+';render()" class="'+(gwSel===g?"on":"")+'">GW'+g+'</button>').join("")+'</div>';
-  const mine=P.filter(x=>x.o===planTeam).map(x=>({...x,e:predPts(x)}));
-  const gk=mine.filter(x=>x.p==="G").sort((a,b)=>b.e-a.e);
-  const out=mine.filter(x=>x.p!=="G").sort((a,b)=>b.e-a.e);
-  let xi=[gk[0]],d=0,m=0,f=0;
-  out.forEach(x=>{if(xi.length>=11)return;
-    const left=11-xi.length;const needD=Math.max(0,3-d),needM=Math.max(0,3-m),needF=Math.max(0,1-f);
-    const reserved=needD+needM+needF;
-    const isNeeded=(x.p==="D"&&needD>0)||(x.p==="M"&&needM>0)||(x.p==="F"&&needF>0);
-    if(isNeeded||left>reserved){xi.push(x);if(x.p==="D")d++;if(x.p==="M")m++;if(x.p==="F")f++;}
-  });
-  const bench=mine.filter(x=>!xi.includes(x));
-  function factorsHtml(x){
-    const f=predParts(x);
-    let rows=f.sig.map(s=>'<div style="display:flex;justify-content:space-between;"><span>'+s[0]+' ('+Math.round(s[1]/f.wsum*100)+'%)</span><span>'+s[2].toFixed(2)+' pts</span></div>').join('');
-    rows+='<div style="display:flex;justify-content:space-between;"><span>Blended base</span><span>'+f.base.toFixed(2)+' pts</span></div>';
-    rows+='<div style="display:flex;justify-content:space-between;"><span>Fixture</span><span>&times;'+f.fx.toFixed(2)+(f.fx===0?' (blank GW)':f.fx>1.5?' (double GW)':'')+'</span></div>';
-    rows+='<div style="display:flex;justify-content:space-between;"><span>Availability</span><span>&times;'+f.avail.toFixed(2)+'</span></div>';
-    if(f.mom!==1)rows+='<div style="display:flex;justify-content:space-between;"><span>Momentum</span><span>&times;'+f.mom.toFixed(2)+'</span></div>';
-    rows+='<div style="display:flex;justify-content:space-between;font-weight:700;color:var(--txt);border-top:1px solid var(--line);padding-top:4px;margin-top:2px;"><span>Predicted</span><span>'+f.pred.toFixed(1)+' pts</span></div>';
-    const cc=confidenceOf(x);
-    rows+='<div style="margin-top:5px;color:'+cc.col+';font-weight:700;">'+cc.band+' confidence &middot; '+cc.pct+'%</div>';
-    if(cc.why.length)rows+='<div>Because '+cc.why.join(", ")+'.</div>';
-    if(cc.risk.length)rows+='<div>Watch: '+cc.risk.join(", ")+'.</div>';
-    return '<div style="font-size:11.5px;color:var(--sub);padding:6px 4px 8px 34px;border-bottom:1px solid var(--line);line-height:1.8;">'+rows+'</div>';
-  }
-  function prow(x,strong){
-    const inj=statusOf(x.n);const mo=MOM[x.n]||0;
-    const ch=CHANCE[x.n]!=null?'<span style="font-size:10px;font-weight:700;color:var(--warn);flex-shrink:0;">'+CHANCE[x.n]+'%</span>':'';
-    const cf=confChip(x);
-    const moChip=mo?'<span style="font-size:10px;font-weight:700;color:'+(mo>0?'var(--a)':'var(--danger)')+';flex-shrink:0;">'+(mo>0?'&#9650;':'&#9660;')+Math.abs(mo)+'</span>':'';
-    return '<div class="row"'+(inj===2?' style="opacity:.4"':'')+'><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn" style="cursor:pointer;" onclick="expanded=expanded===\''+esc(x.n)+'\'?null:\''+esc(x.n)+'\';render()">'+x.n+'<small>'+POSNAME[x.p]+(PRICE[x.n]?' &middot; &pound;'+PRICE[x.n].toFixed(1)+'m':'')+'</small></span>'+ch+moChip+cf+'<span class="val">'+x.e.toFixed(1)+'</span><button onclick="cycleInj(\''+esc(x.n)+'\')" style="border:1px solid var(--line);background:'+(inj===2?'rgba(224,110,90,.18)':inj===1?'rgba(224,168,76,.15)':'transparent')+';color:'+(inj===2?'var(--danger)':inj===1?'var(--warn)':'var(--sub)')+';border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;flex-shrink:0;width:52px;">'+INJLBL[inj]+'</button></div>'+(expanded===x.n?factorsHtml(x):'');
-  }
-  h+='<div class="card"><div class="lbl">Recommended XI &middot; Gameweek '+gwSel+' &middot; predicted points &middot; tap a name for why</div>';
-  xi.sort((a,b)=>ORDER[a.p]-ORDER[b.p]||b.e-a.e).forEach(x=>{h+=prow(x)});
-  h+='</div><div class="card"><div class="lbl">Bench</div>';
-  bench.sort((a,b)=>b.e-a.e).forEach(x=>{h+=prow(x)});
-  h+='</div>';
-  const free=P.filter(x=>x.o==="F").map(x=>({...x,e:predPts(x)})).sort((a,b)=>b.e-a.e);
-  h+='<div class="card"><div class="lbl">Waiver targets this gameweek</div>';
-  let shown=0;
-  free.forEach(x=>{if(shown>=10)return;
-    const weak=mine.filter(y=>y.p===x.p).sort((a,b)=>a.e-b.e)[0];
-    if(weak&&x.e>weak.e){shown++;
-      h+='<div class="row"><span class="fxbar fx'+fxOf(x.t)+'">'+x.t+'</span><span class="pn">'+x.n+'<small>'+POSNAME[x.p]+'</small></span><span class="val">'+x.e.toFixed(1)+'</span><span style="font-size:11px;color:var(--sub);flex-shrink:0;">for '+weak.n.split(" ").slice(-1)[0]+' ('+weak.e.toFixed(1)+')</span></div>';}
-  });
-  if(!shown)h+='<div class="note" style="margin:0">No free agent beats this squad this week. Hold.</div>';
-  h+='</div>';
-  h+='<div class="note"><b>Predicted points, openly worked.</b> Every number here is predicted FPL points for the selected gameweek: a blend of the draft projection (40%), live form (30%) and the official FPL expected score (30%), weights renormalised when a signal is missing, then multiplied by fixture, availability and momentum. Tap any player name to see the exact working. Until real matches are played, form is empty and the model leans on projection plus the official expectation. Squad standings on the Squads tab still use the fixed draft value, so the family table never moves under you. Never drop an A-grade on one bad week.</div>';
-  return h;
-}
 document.querySelector(".tabs").addEventListener("click",e=>{if(e.target.dataset.t){tab=e.target.dataset.t;render()}});
 render();
 loadLive();
